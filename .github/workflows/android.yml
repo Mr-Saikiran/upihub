@@ -34,10 +34,13 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
 
   release:
-    # Signed Play Store bundle for version tags, when the signing secrets exist.
+    # Version tags (v0.4.0, ...) build the signed APK and AAB and publish a
+    # GitHub Release with the APK attached. Needs the UPIHUB_* signing secrets.
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -45,6 +48,10 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
+      - name: Check the tag matches versionName
+        run: |
+          version=$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' app/build.gradle.kts)
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "::error::Tag $GITHUB_REF_NAME does not match versionName $version"; exit 1; }
       - name: Restore upload keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.UPIHUB_KEYSTORE_BASE64 }}
@@ -58,9 +65,23 @@ jobs:
           UPIHUB_KEY_ALIAS: ${{ secrets.UPIHUB_KEY_ALIAS }}
           UPIHUB_KEY_PASSWORD: ${{ secrets.UPIHUB_KEY_PASSWORD }}
         run: ./gradlew bundleRelease assembleRelease
+      - name: Collect release files
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir dist
+          cp app/build/outputs/apk/release/app-release.apk "dist/techswitch-upihub-$version.apk"
+          cp app/build/outputs/bundle/release/app-release.aab "dist/techswitch-upihub-$version-playstore.aab"
+          (cd dist && sha256sum * > SHA256SUMS)
+          notes="docs/release-notes/$GITHUB_REF_NAME.md"
+          if [ -f "$notes" ]; then cp "$notes" dist-notes.md; else echo "UPI Hub $GITHUB_REF_NAME" > dist-notes.md; fi
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: UPI Hub ${{ github.ref_name }}
+          body_path: dist-notes.md
+          files: |
+            dist/techswitch-upihub-*.apk
+            dist/SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
           name: upi-hub-release
-          path: |
-            app/build/outputs/bundle/release/app-release.aab
-            app/build/outputs/apk/release/app-release.apk
+          path: dist/

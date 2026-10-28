@@ -152,9 +152,11 @@ Organization accounts can usually go straight to production.
 
 1. Bump `versionCode` (must always increase) and `versionName` in
    `app/build.gradle.kts`.
-2. Build with `./gradlew bundleRelease`, or push a tag (`git tag v0.5.0 &&
-   git push origin v0.5.0`) once the four `UPIHUB_*` secrets are set, then
-   download the bundle from the workflow run.
+2. Build with `./gradlew bundleRelease`, or add
+   `docs/release-notes/v0.5.0.md` and push a tag (`git tag v0.5.0 &&
+   git push origin v0.5.0`) once the four `UPIHUB_*` secrets are set. The
+   workflow publishes a GitHub Release with the APK; the AAB is in the
+   run's `upi-hub-release` artifact.
 3. Upload to a testing track first, then promote to production.
 
 ## 10. Policy notes worth reading before submitting
