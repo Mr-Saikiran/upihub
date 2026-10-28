@@ -20,6 +20,7 @@
         <package android:name="money.jupiter" />
         <package android:name="com.google.android.apps.nbu.paisa.user" />
         <package android:name="com.phonepe.app" />
+        <package android:name="money.super.payments" />
         <package android:name="in.org.npci.upiapp" />
     </queries>
 

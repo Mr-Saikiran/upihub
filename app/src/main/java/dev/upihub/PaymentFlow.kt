@@ -30,11 +30,11 @@ class PaymentFlow(
     private val onCancel: () -> Unit,
 ) {
     fun start(payment: UpiPayment) {
-        val installed = UpiApps.discover(activity, prefs)
+        val installed = UpiApps.discover(activity, prefs).filter { it.acceptsLinks }
         if (installed.isEmpty()) {
             MaterialAlertDialogBuilder(activity)
                 .setMessage(R.string.no_upi_apps)
-                .setPositiveButton(R.string.install_kiwi) { _, _ -> openStore(UpiApps.DEFAULT_PACKAGE) }
+                .setPositiveButton(R.string.find_upi_app) { _, _ -> openStoreSearch() }
                 .setNegativeButton(R.string.cancel, null)
                 .setOnDismissListener { onCancel() }
                 .show()
@@ -45,7 +45,7 @@ class PaymentFlow(
         val default = apps.firstOrNull { it.packageName == prefs.defaultPackage }
         // Without an amount the sheet is still needed to collect one.
         if (!prefs.alwaysAsk && default != null && payment.amount != null) {
-            pay(payment, default.packageName)
+            pay(payment, default)
             return
         }
         showChooser(payment, apps, default?.packageName ?: apps.first().packageName)
@@ -87,6 +87,8 @@ class PaymentFlow(
             }
             b.rememberCheck.visibility = if (selected == prefs.defaultPackage) ViewGroup.GONE else ViewGroup.VISIBLE
         }
+        // With no default yet, the first app picked becomes it unless unticked.
+        b.rememberCheck.isChecked = prefs.defaultPackage == null
         b.amountInput.doAfterTextChanged { refreshButton() }
 
         val adapter = AppAdapter(apps, { selected }) { app ->
@@ -102,7 +104,7 @@ class PaymentFlow(
             if (b.rememberCheck.isChecked) prefs.defaultPackage = selected
             launched = true
             dialog.dismiss()
-            pay(toSend, selected)
+            pay(toSend, apps.first { it.packageName == selected })
         }
         dialog.setOnDismissListener { if (!launched) onCancel() }
         dialog.setContentView(b.root)
@@ -114,24 +116,32 @@ class PaymentFlow(
         if (needsAmount) b.amountInput.requestFocus()
     }
 
-    private fun pay(payment: UpiPayment, packageName: String) {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(payment.raw)).setPackage(packageName)
+    /**
+     * Opens the app's own UPI activity explicitly, so apps whose link handler
+     * lacks CATEGORY_DEFAULT still receive the payment.
+     */
+    private fun pay(payment: UpiPayment, app: UpiApp) {
+        val component = app.component ?: return onCancel()
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(payment.raw))
+            .setPackage(app.packageName)
+            .setComponent(component)
         try {
             launch(intent)
         } catch (_: ActivityNotFoundException) {
-            Toast.makeText(activity, activity.getString(R.string.app_cannot_open, UpiApps.labelFor(packageName)), Toast.LENGTH_LONG).show()
+            Toast.makeText(activity, activity.getString(R.string.app_cannot_open, app.label), Toast.LENGTH_LONG).show()
+            onCancel()
+        } catch (_: SecurityException) {
+            Toast.makeText(activity, activity.getString(R.string.app_cannot_open, app.label), Toast.LENGTH_LONG).show()
             onCancel()
         }
     }
 
-    private fun openStore(packageName: String) {
-        val market = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageName"))
+    private fun openStoreSearch() {
+        val market = Intent(Intent.ACTION_VIEW, Uri.parse("market://search?q=UPI&c=apps"))
         try {
             activity.startActivity(market)
         } catch (_: ActivityNotFoundException) {
-            activity.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$packageName")),
-            )
+            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/search?q=UPI&c=apps")))
         }
     }
 

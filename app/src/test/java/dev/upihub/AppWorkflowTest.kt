@@ -50,6 +50,8 @@ class AppWorkflowTest {
     private val merchantQr = "upi://pay?pa=chaipoint.blr@okaxis&pn=Chai%20Point&mc=5812&tr=TR42&am=149.00&cu=INR&sign=AbC%2B%3D"
 
     @Before fun installFakeUpiApps() {
+        // Most tests start after the user picked Kiwi; first-launch tests clear it.
+        Prefs(app).defaultPackage = "in.gokiwi.kiwitpap"
         // A subset is installed: INDmoney, MobiKwik, Jupiter and BHIM are not.
         installUpiApp("in.gokiwi.kiwitpap", "Kiwi", Color.rgb(0x12, 0xB7, 0x6A))
         installUpiApp("net.one97.paytm", "Paytm", Color.rgb(0x00, 0x2E, 0x6E))
@@ -218,16 +220,78 @@ class AppWorkflowTest {
         assertEquals(listOf("Kiwi", "CRED", "Google Pay", "PhonePe"), openChooserLabels())
     }
 
-    @Test fun otherUpiAppsAreHiddenUntilAdded() {
+    @Test fun otherUpiAppsAreShownUntilRemoved() {
         installUpiApp("com.example.otherupi", "Other UPI", Color.rgb(0xF0, 0xA0, 0x40))
-        assertTrue("Other UPI" !in openChooserLabels())
+        assertTrue("Other UPI" in openChooserLabels())
 
         val manager = Robolectric.buildActivity(ManageAppsActivity::class.java).setup().get()
         idle()
-        assertFalse(managerSwitch(manager, "Other UPI").isChecked)
+        assertTrue(managerSwitch(manager, "Other UPI").isChecked)
         managerSwitch(manager, "Other UPI").performClick()
         idle()
-        assertTrue("Other UPI" in openChooserLabels())
+        assertTrue("Other UPI" !in openChooserLabels())
+    }
+
+    @Test fun firstLaunchAsksForDefaultFromAllUpiApps() {
+        Prefs(app).defaultPackage = null
+        installUpiApp("com.example.otherupi", "Other UPI", Color.rgb(0xF0, 0xA0, 0x40))
+        shadowOf(app).grantPermissions(Manifest.permission.CAMERA)
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        idle()
+
+        val picker = ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
+        val list = picker.listView
+        val labels = (0 until list.adapter.count).map { (list.adapter.getItem(it) as UpiApp).label }
+        assertEquals(listOf("Kiwi", "Paytm", "CRED", "Google Pay", "PhonePe", "Other UPI"), labels)
+        assertEquals("Choose default app", activity.findViewById<android.widget.TextView>(R.id.defaultAppText).text.toString())
+        fakeCameraFrame(activity.findViewById(R.id.barcodeView))
+        capture(activity.window.decorView, "09-choose-default", dialog = picker.window!!.decorView)
+
+        shadowOf(list).performItemClick(labels.indexOf("Paytm"))
+        idle()
+        assertEquals("net.one97.paytm", Prefs(app).defaultPackage)
+        assertEquals("Paytm", activity.findViewById<android.widget.TextView>(R.id.defaultAppText).text.toString())
+    }
+
+    @Test fun withoutDefaultFirstPickedAppBecomesDefault() {
+        Prefs(app).defaultPackage = null
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        (ShadowDialog.getLatestDialog())?.dismiss() // Skip the launch picker.
+        activity.startPayment((UpiPayment.parse(merchantQr) as UpiPayment.Parsed.Ok).payment)
+        idle()
+        val sheet = ShadowDialog.getLatestDialog() as BottomSheetDialog
+        assertTrue(sheet.findViewById<android.widget.CheckBox>(R.id.rememberCheck)!!.isChecked)
+        sheet.findViewById<Button>(R.id.payButton)!!.performClick()
+        idle()
+        assertEquals("in.gokiwi.kiwitpap", Prefs(app).defaultPackage)
+    }
+
+    @Test fun appWhoseUpiActivityLacksDefaultCategoryIsListedAndOpenedDirectly() {
+        installUpiApp("money.super.payments", "super.money", Color.rgb(0xFF, 0xD5, 0x00), defaultCategory = false)
+        assertTrue("super.money" in openChooserLabels())
+
+        Prefs(app).defaultPackage = "money.super.payments"
+        Prefs(app).alwaysAsk = false
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        activity.startPayment((UpiPayment.parse(merchantQr) as UpiPayment.Parsed.Ok).payment)
+        idle()
+        val sent = shadowOf(activity).nextStartedActivityForResult.intent
+        assertEquals(ComponentName("money.super.payments", "money.super.payments.PayActivity"), sent.component)
+        assertEquals(merchantQr, sent.dataString)
+    }
+
+    @Test fun supportedAppWithoutUpiLinksIsExplainedNotOffered() {
+        // BHIM installed, but with no activity that takes upi:// links.
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply {
+            packageName = "in.org.npci.upiapp"
+            applicationInfo = ApplicationInfo().apply { packageName = "in.org.npci.upiapp"; nonLocalizedLabel = "BHIM" }
+        })
+        assertTrue("BHIM" !in openChooserLabels())
+        val manager = Robolectric.buildActivity(ManageAppsActivity::class.java).setup().get()
+        idle()
+        assertEquals("Installed, but doesn't accept UPI links from other apps",
+            managerRow(manager, "BHIM").findViewById<android.widget.TextView>(R.id.status).text.toString())
+        assertEquals(View.INVISIBLE, managerSwitch(manager, "BHIM").visibility)
     }
 
     @Test fun defaultAppCannotBeHidden() {
@@ -302,6 +366,33 @@ class AppWorkflowTest {
         save(bmp, "play-store-icon-512")
     }
 
+    /** 1024x500 Play Store feature graphic built from the launcher icon. */
+    @Test fun exportPlayStoreFeatureGraphic() {
+        val w = 1024
+        val h = 500
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        c.drawPaint(Paint().apply {
+            shader = android.graphics.LinearGradient(0f, 0f, w.toFloat(), h.toFloat(),
+                Color.rgb(0x7B, 0x5C, 0xFF), Color.rgb(0x2A, 0x14, 0x8C), android.graphics.Shader.TileMode.CLAMP)
+        })
+        val iconSize = 300
+        val left = 70
+        val top = (h - iconSize) / 2
+        ContextCompat.getDrawable(app, R.drawable.ic_launcher_foreground)!!.apply {
+            val full = iconSize * 108 / 72
+            val off = (iconSize - full) / 2
+            setBounds(left + off, top + off, left + off + full, top + off + full)
+        }.draw(c)
+        val title = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = 76f; isFakeBoldText = true }
+        val body = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(0xE6, 0xFF, 0xFF, 0xFF); textSize = 36f }
+        val x = left + iconSize + 50f
+        c.drawText("UPI Hub", x, 215f, title)
+        c.drawText("One scanner for all your", x, 285f, body)
+        c.drawText("UPI apps. Pick, pay, done.", x, 335f, body)
+        save(bmp, "play-feature-graphic-1024x500")
+    }
+
     // ---- helpers ----
 
     private fun chooserLabels(sheet: BottomSheetDialog): List<String> {
@@ -344,16 +435,16 @@ class AppWorkflowTest {
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
-    private fun installUpiApp(pkg: String, label: String, color: Int) {
+    private fun installUpiApp(pkg: String, label: String, color: Int, defaultCategory: Boolean = true) {
         val spm = shadowOf(app.packageManager)
         spm.installPackage(PackageInfo().apply {
             packageName = pkg
             applicationInfo = ApplicationInfo().apply { packageName = pkg; nonLocalizedLabel = label }
         })
         val component = ComponentName(pkg, "$pkg.PayActivity")
-        spm.addActivityIfNotPresent(component)
+        spm.addActivityIfNotPresent(component).exported = true
         spm.addIntentFilterForActivity(component, IntentFilter(Intent.ACTION_VIEW).apply {
-            addCategory(Intent.CATEGORY_DEFAULT)
+            if (defaultCategory) addCategory(Intent.CATEGORY_DEFAULT)
             addDataScheme("upi")
         })
         spm.setApplicationIcon(pkg, letterIcon(app, label.first(), color))

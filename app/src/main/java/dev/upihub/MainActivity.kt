@@ -11,6 +11,10 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.view.HapticFeedbackConstants
 import android.view.View
+import android.view.ViewGroup
+import android.widget.ArrayAdapter
+import android.widget.ImageView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
@@ -102,6 +106,8 @@ class MainActivity : AppCompatActivity() {
             sharedImage(intent)?.let(::handleImage)
             // Open straight into the scanner: ask for the camera on launch.
             if (!hasCamera()) requestCamera(fromButton = false)
+            // No default yet (or it was uninstalled): let the user pick one from all UPI apps.
+            if (currentDefault() == null) chooseDefault()
         }
     }
 
@@ -263,19 +269,23 @@ class MainActivity : AppCompatActivity() {
 
     // ---- Settings ----
 
+    /** The default app if it is still installed and takes UPI links, else null. */
+    private fun currentDefault(apps: List<UpiApp> = UpiApps.discover(this, prefs)): UpiApp? =
+        apps.firstOrNull { it.packageName == prefs.defaultPackage && it.acceptsLinks }
+
     private fun refreshDefaultApp() {
-        b.defaultAppText.text = UpiApps.labelFor(prefs.defaultPackage)
-        val icon = UpiApps.iconFor(this, prefs.defaultPackage)
-        if (icon != null) b.defaultAppIcon.setImageDrawable(icon) else b.defaultAppIcon.setImageResource(R.mipmap.ic_launcher)
+        val default = currentDefault()
+        b.defaultAppText.text = default?.label ?: getString(R.string.choose_default)
+        if (default?.icon != null) b.defaultAppIcon.setImageDrawable(default.icon)
+        else b.defaultAppIcon.setImageResource(R.mipmap.ic_launcher)
     }
 
     private fun showSettings() {
         val dialog = BottomSheetDialog(this)
         val s = SheetSettingsBinding.inflate(layoutInflater)
-        s.defaultValue.text = UpiApps.labelFor(prefs.defaultPackage)
-        s.defaultRow.setOnClickListener {
-            chooseDefault { s.defaultValue.text = UpiApps.labelFor(prefs.defaultPackage) }
-        }
+        fun showDefault() { s.defaultValue.text = currentDefault()?.label ?: getString(R.string.not_set) }
+        showDefault()
+        s.defaultRow.setOnClickListener { chooseDefault { showDefault() } }
         s.alwaysAskSwitch.isChecked = prefs.alwaysAsk
         s.alwaysAskSwitch.setOnCheckedChangeListener { _, v -> prefs.alwaysAsk = v }
         val apps = UpiApps.discover(this, prefs)
@@ -297,23 +307,35 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
+    /** Lists every installed UPI app (with icons) and saves the one picked as default. */
     private fun chooseDefault(onChanged: () -> Unit = {}) {
-        val apps = UpiApps.discover(this, prefs)
+        val apps = UpiApps.discover(this, prefs).filter { it.acceptsLinks }
         if (apps.isEmpty()) {
             Toast.makeText(this, R.string.no_upi_apps, Toast.LENGTH_LONG).show()
             return
         }
-        val labels = apps.map { it.label }.toTypedArray()
-        val current = apps.indexOfFirst { it.packageName == prefs.defaultPackage }
+        val current = currentDefault(apps)?.packageName
+        val adapter = object : ArrayAdapter<UpiApp>(this, R.layout.item_default_app, apps) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val row = convertView ?: layoutInflater.inflate(R.layout.item_default_app, parent, false)
+                val app = apps[position]
+                row.findViewById<TextView>(R.id.label).text = app.label
+                val icon = row.findViewById<ImageView>(R.id.icon)
+                if (app.icon != null) icon.setImageDrawable(app.icon) else icon.setImageResource(android.R.drawable.sym_def_app_icon)
+                row.findViewById<View>(R.id.check).visibility = if (app.packageName == current) View.VISIBLE else View.INVISIBLE
+                return row
+            }
+        }
         MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.default_app)
-            .setSingleChoiceItems(labels, current) { dialog, which ->
+            .setTitle(R.string.choose_default_title)
+            .setAdapter(adapter) { dialog, which ->
                 prefs.defaultPackage = apps[which].packageName
                 prefs.setVisible(apps[which].packageName, true)
                 dialog.dismiss()
                 refreshDefaultApp()
                 onChanged()
             }
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 

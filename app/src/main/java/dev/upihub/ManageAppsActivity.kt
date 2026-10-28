@@ -124,11 +124,13 @@ class ManageAppsActivity : AppCompatActivity() {
 
             holder.b.visibleSwitch.setOnCheckedChangeListener(null)
             holder.b.visibleSwitch.isChecked = app.visible
-            // The default app is always offered; change the default first to hide it.
-            holder.b.visibleSwitch.visibility = if (isDefault) View.INVISIBLE else View.VISIBLE
+            // The default app is always offered (change the default first to hide it);
+            // an app that takes no UPI links cannot be offered at all.
+            holder.b.visibleSwitch.visibility = if (isDefault || !app.acceptsLinks) View.INVISIBLE else View.VISIBLE
             holder.b.visibleSwitch.contentDescription = app.label
             holder.b.status.setText(
                 when {
+                    !app.acceptsLinks -> R.string.app_no_links
                     isDefault -> R.string.default_always_shown
                     app.visible -> R.string.app_shown
                     else -> R.string.app_hidden

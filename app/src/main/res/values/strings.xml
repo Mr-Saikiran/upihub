@@ -39,8 +39,12 @@
     <string name="allow_camera">Allow camera</string>
     <string name="open_settings">Open settings</string>
     <string name="no_qr_in_image">No QR code found in this image.</string>
-    <string name="no_upi_apps">None of your UPI apps are installed. Install Kiwi or another app to continue.</string>
-    <string name="install_kiwi">Install Kiwi</string>
+    <string name="no_upi_apps">No UPI app on this phone accepts payment links. Install one to continue.</string>
+    <string name="find_upi_app">Find a UPI app</string>
+    <string name="choose_default">Choose default app</string>
+    <string name="choose_default_title">Choose your default UPI app</string>
+    <string name="not_set">Not set</string>
+    <string name="app_no_links">Installed, but doesn\'t accept UPI links from other apps</string>
     <string name="upi_id_hint">UPI ID (e.g. name@okbank)</string>
     <string name="payee_name_hint">Payee name (optional)</string>
     <string name="amount_hint">Amount (optional)</string>
