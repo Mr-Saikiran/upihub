@@ -34,6 +34,12 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- "Share" a QR screenshot (e.g. from WhatsApp or Gallery) to pay it. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
         </activity>
 
         <!-- Lets UPI Hub appear when a website or app opens a upi://pay link.
@@ -52,10 +58,10 @@
             </intent-filter>
         </activity>
 
-        <!-- Portrait QR scanner. -->
+        <!-- The library forces landscape; follow the device instead. -->
         <activity
             android:name="com.journeyapps.barcodescanner.CaptureActivity"
-            android:screenOrientation="fullSensor"
+            android:screenOrientation="unspecified"
             tools:replace="screenOrientation" />
     </application>
 </manifest>

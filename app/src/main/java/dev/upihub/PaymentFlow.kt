@@ -59,7 +59,7 @@ class PaymentFlow(
         ).joinToString(" · ")
 
         fun refreshButton() {
-            b.payButton.text = "${activity.getString(R.string.pay)} with ${apps.first { it.packageName == selected }.label}"
+            b.payButton.text = activity.getString(R.string.pay_with, apps.first { it.packageName == selected }.label)
             b.rememberCheck.visibility = if (selected == prefs.defaultPackage) ViewGroup.GONE else ViewGroup.VISIBLE
         }
 
@@ -124,7 +124,7 @@ class PaymentFlow(
             holder.b.label.text = app.label
             holder.b.status.text = when {
                 !app.installed -> activity.getString(R.string.not_installed)
-                app.packageName == prefs.defaultPackage -> "Default"
+                app.packageName == prefs.defaultPackage -> activity.getString(R.string.default_label)
                 else -> activity.getString(R.string.installed)
             }
             if (app.icon != null) holder.b.icon.setImageDrawable(app.icon)
@@ -133,8 +133,13 @@ class PaymentFlow(
             holder.b.radio.visibility = if (app.installed) ViewGroup.VISIBLE else ViewGroup.INVISIBLE
             holder.b.radio.isChecked = app.packageName == selected()
             holder.b.root.setOnClickListener {
+                val before = apps.indexOfFirst { it.packageName == selected() }
                 onClick(app)
-                notifyDataSetChanged()
+                val after = apps.indexOfFirst { it.packageName == selected() }
+                if (before != after) {
+                    if (before >= 0) notifyItemChanged(before)
+                    notifyItemChanged(after)
+                }
             }
         }
     }

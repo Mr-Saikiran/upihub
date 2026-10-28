@@ -21,6 +21,15 @@
             app:iconGravity="textStart" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/galleryButton"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:layout_marginTop="12dp"
+            android:text="@string/scan_from_gallery"
+            app:cornerRadius="20dp" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/manualButton"
             style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="match_parent"

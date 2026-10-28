@@ -24,6 +24,8 @@ Supported apps (package IDs verified on Google Play India):
   "Make this my default" in the chooser.
 - **Ask every time** switch — turn off to open the default app directly.
 - **Pay to UPI ID** — manual entry (UPI ID, name, amount, note).
+- **Pay from QR screenshot** — pick an image (system photo picker, no storage
+  permission) or *Share* it to UPI Hub from WhatsApp, Gallery, etc.
 - **Handles `upi://pay` links** from browsers/other apps and relays the paying
   app's result back to the caller.
 - Optional: show other installed UPI apps (GPay, PhonePe, BHIM, ...).

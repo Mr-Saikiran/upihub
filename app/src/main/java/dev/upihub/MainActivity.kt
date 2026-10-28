@@ -1,18 +1,26 @@
 package dev.upihub
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import dev.upihub.databinding.ActivityMainBinding
 import dev.upihub.databinding.DialogManualBinding
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : AppCompatActivity() {
     private lateinit var b: ActivityMainBinding
@@ -27,6 +35,11 @@ class MainActivity : AppCompatActivity() {
         r.contents?.let(::handleScanned)
     }
 
+    // System photo picker: no storage permission needed.
+    private val pickImage = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        uri?.let(::handleImage)
+    }
+
     private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (!granted) Toast.makeText(this, R.string.camera_denied, Toast.LENGTH_LONG).show()
     }
@@ -39,6 +52,9 @@ class MainActivity : AppCompatActivity() {
         flow = PaymentFlow(this, prefs, launch = { payLauncher.launch(it) }, onCancel = {})
 
         b.scanButton.setOnClickListener { startScan() }
+        b.galleryButton.setOnClickListener {
+            pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        }
         b.manualButton.setOnClickListener { showManualEntry() }
         b.changeDefaultButton.setOnClickListener { chooseDefault() }
         b.alwaysAskSwitch.isChecked = prefs.alwaysAsk
@@ -46,10 +62,40 @@ class MainActivity : AppCompatActivity() {
         b.showOthersSwitch.isChecked = prefs.showOtherApps
         b.showOthersSwitch.setOnCheckedChangeListener { _, v -> prefs.showOtherApps = v; refresh() }
 
+        if (savedInstanceState == null) sharedImage(intent)?.let(::handleImage)
+
         // Ask for the camera up front once, so the first scan opens immediately.
         if (!hasCamera() && !prefs.askedCameraOnce) {
             prefs.askedCameraOnce = true
             cameraPermission.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        sharedImage(intent)?.let(::handleImage)
+    }
+
+    private fun sharedImage(intent: Intent?): Uri? {
+        if (intent?.action != Intent.ACTION_SEND) return null
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(Intent.EXTRA_STREAM)
+        }
+    }
+
+    private fun handleImage(uri: Uri) {
+        lifecycleScope.launch {
+            val text = withContext(Dispatchers.Default) {
+                runCatching { QrImageDecoder.decode(contentResolver, uri) }.getOrNull()
+            }
+            if (text == null) {
+                Toast.makeText(this@MainActivity, R.string.no_qr_in_image, Toast.LENGTH_LONG).show()
+            } else {
+                handleScanned(text)
+            }
         }
     }
 
