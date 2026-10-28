@@ -280,6 +280,12 @@ class MainActivity : AppCompatActivity() {
         s.alwaysAskSwitch.setOnCheckedChangeListener { _, v -> prefs.alwaysAsk = v }
         s.showOthersSwitch.isChecked = prefs.showOtherApps
         s.showOthersSwitch.setOnCheckedChangeListener { _, v -> prefs.showOtherApps = v }
+        s.addWidgetButton.setOnClickListener {
+            if (!ScanWidgetProvider.requestPin(this)) {
+                Toast.makeText(this, R.string.add_widget_manual, Toast.LENGTH_LONG).show()
+            }
+            dialog.dismiss()
+        }
         @Suppress("DEPRECATION")
         val version = packageManager.getPackageInfo(packageName, 0).versionName
         s.versionText.text = "${getString(R.string.app_name)} $version · $packageName"

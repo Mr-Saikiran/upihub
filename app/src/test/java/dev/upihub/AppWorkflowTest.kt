@@ -23,6 +23,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -154,6 +155,70 @@ class AppWorkflowTest {
         assertTrue(router.isFinishing)
         assertEquals(android.app.Activity.RESULT_OK, shadowOf(router).resultCode)
         assertEquals("txnId=X1&responseCode=00&Status=SUCCESS", shadowOf(router).resultIntent.getStringExtra("response"))
+    }
+
+    @Test fun personalQrWithoutAmountAsksForItAndSendsIt() {
+        val personalQr = "upi://pay?pa=ravi.k@okaxis&pn=Ravi%20Kumar&mode=02"
+        Prefs(app).alwaysAsk = false // The amount step is still required.
+        shadowOf(app).grantPermissions(Manifest.permission.CAMERA)
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        fakeCameraFrame(activity.findViewById(R.id.barcodeView))
+        activity.startPayment((UpiPayment.parse(personalQr) as UpiPayment.Parsed.Ok).payment)
+        idle()
+
+        val sheet = ShadowDialog.getLatestDialog() as BottomSheetDialog
+        val pay = sheet.findViewById<Button>(R.id.payButton)!!
+        assertEquals(View.VISIBLE, sheet.findViewById<View>(R.id.amountLayout)!!.visibility)
+        assertFalse(pay.isEnabled)
+        sheet.findViewById<android.widget.EditText>(R.id.amountInput)!!.setText("150")
+        assertTrue(pay.isEnabled)
+        assertEquals("Pay ₹150.00 with Kiwi", pay.text.toString())
+        capture(activity.window.decorView, "05-chooser-enter-amount", dialog = sheet.window!!.decorView)
+
+        pay.performClick()
+        idle()
+        val sent = shadowOf(activity).nextStartedActivityForResult.intent
+        assertEquals("in.gokiwi.kiwitpap", sent.`package`)
+        assertEquals("$personalQr&cu=INR&am=150.00", sent.dataString)
+    }
+
+    @Test fun payButtonStaysOnScreenWithManyApps() {
+        installUpiApp("in.indwealth", "INDmoney", Color.BLACK)
+        installUpiApp("com.mobikwik_new", "MobiKwik", Color.rgb(0x10, 0x5B, 0xE8))
+        installUpiApp("money.jupiter", "Jupiter", Color.rgb(0xF2, 0x6B, 0x5B))
+        installUpiApp("com.example.otherupi", "Other UPI", Color.rgb(0xF0, 0xA0, 0x40))
+        Prefs(app).showOtherApps = true
+        val personalQr = "upi://pay?pa=ravi.k@okaxis&pn=Ravi%20Kumar"
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        activity.startPayment((UpiPayment.parse(personalQr) as UpiPayment.Parsed.Ok).payment)
+        idle()
+
+        val sheet = ShadowDialog.getLatestDialog() as BottomSheetDialog
+        val list = sheet.findViewById<RecyclerView>(R.id.appList)!!
+        assertEquals(UpiApps.PREFERRED.size + 1, list.adapter!!.itemCount)
+        val pay = sheet.findViewById<Button>(R.id.payButton)!!
+        val window = sheet.window!!.decorView
+        val loc = IntArray(2)
+        pay.getLocationInWindow(loc)
+        assertTrue("button bottom ${loc[1] + pay.height} > window ${window.height}", loc[1] + pay.height <= window.height)
+        assertTrue("button not laid out", pay.height > 0)
+        capture(activity.window.decorView, "06-chooser-many-apps", dialog = window)
+    }
+
+    @Test fun homeScreenWidgetOpensScanner() {
+        val manager = android.appwidget.AppWidgetManager.getInstance(app)
+        val id = shadowOf(manager).createWidget(ScanWidgetProvider::class.java, R.layout.widget_scan)
+        val view = shadowOf(manager).getViewFor(id)
+        view.findViewById<View>(R.id.widgetRoot).performClick()
+        val started = shadowOf(app).nextStartedActivity
+        assertEquals(MainActivity::class.java.name, started.component!!.className)
+
+        val px = (96 * app.resources.displayMetrics.density).toInt()
+        view.measure(View.MeasureSpec.makeMeasureSpec(px, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(px, View.MeasureSpec.EXACTLY))
+        view.layout(0, 0, px, px)
+        val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
+        view.draw(Canvas(bmp))
+        save(bmp, "07-widget")
     }
 
     @Test @Config(qualifiers = "w411dp-h891dp-night-xxhdpi")

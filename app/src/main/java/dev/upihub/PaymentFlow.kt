@@ -5,8 +5,10 @@ import android.content.Intent
 import android.net.Uri
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.widget.doAfterTextChanged
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -40,7 +42,8 @@ class PaymentFlow(
             return
         }
         val default = installed.firstOrNull { it.packageName == prefs.defaultPackage }
-        if (!prefs.alwaysAsk && default != null) {
+        // Without an amount the sheet is still needed to collect one.
+        if (!prefs.alwaysAsk && default != null && payment.amount != null) {
             pay(payment, default.packageName)
             return
         }
@@ -62,10 +65,28 @@ class PaymentFlow(
         ).joinToString(" · ")
         b.amountText.text = payment.amount?.let { "₹$it" }.orEmpty()
 
+        val needsAmount = payment.amount == null
+        b.amountLayout.visibility = if (needsAmount) ViewGroup.VISIBLE else ViewGroup.GONE
+
+        /** The payment to send, or null while a required amount is missing or invalid. */
+        fun paymentToSend(): UpiPayment? {
+            if (!needsAmount) return payment
+            val typed = b.amountInput.text?.toString().orEmpty().trim()
+            return (payment.withAmount(typed) as? UpiPayment.Parsed.Ok)?.payment
+        }
+
         fun refreshButton() {
-            b.payButton.text = activity.getString(R.string.pay_with, apps.first { it.packageName == selected }.label)
+            val label = apps.first { it.packageName == selected }.label
+            val toSend = paymentToSend()
+            b.payButton.isEnabled = toSend != null
+            b.payButton.text = if (needsAmount && toSend?.amount != null) {
+                activity.getString(R.string.pay_amount_with, toSend.amount, label)
+            } else {
+                activity.getString(R.string.pay_with, label)
+            }
             b.rememberCheck.visibility = if (selected == prefs.defaultPackage) ViewGroup.GONE else ViewGroup.VISIBLE
         }
+        b.amountInput.doAfterTextChanged { refreshButton() }
 
         val adapter = AppAdapter(apps, { selected }) { app ->
             if (app.installed) {
@@ -80,16 +101,20 @@ class PaymentFlow(
         refreshButton()
 
         b.payButton.setOnClickListener {
+            val toSend = paymentToSend() ?: return@setOnClickListener
             if (b.rememberCheck.isChecked) prefs.defaultPackage = selected
             launched = true
             dialog.dismiss()
-            pay(payment, selected)
+            pay(toSend, selected)
         }
         dialog.setOnDismissListener { if (!launched) onCancel() }
         dialog.setContentView(b.root)
         dialog.behavior.state = BottomSheetBehavior.STATE_EXPANDED
         dialog.behavior.skipCollapsed = true
+        @Suppress("DEPRECATION")
+        dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         dialog.show()
+        if (needsAmount) b.amountInput.requestFocus()
     }
 
     private fun pay(payment: UpiPayment, packageName: String) {

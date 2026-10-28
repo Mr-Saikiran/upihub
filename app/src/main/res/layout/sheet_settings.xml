@@ -87,6 +87,17 @@
         android:textAppearance="?attr/textAppearanceBodySmall"
         android:textColor="?attr/colorOnSurfaceVariant" />
 
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/addWidgetButton"
+        style="@style/Widget.Material3.Button.TonalButton"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_marginTop="20dp"
+        android:text="@string/add_widget"
+        app:cornerRadius="16dp"
+        app:icon="@drawable/ic_qr_scan"
+        app:iconGravity="textStart" />
+
     <TextView
         android:id="@+id/versionText"
         android:layout_width="wrap_content"

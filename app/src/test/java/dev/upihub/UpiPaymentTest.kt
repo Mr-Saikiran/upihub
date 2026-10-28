@@ -49,6 +49,25 @@ class UpiPaymentTest {
         assertEquals("upi://pay?pa=a@ybl&am=0.00", p.raw)
     }
 
+    @Test fun withAmountAddsAmountAndKeepsOtherParamsExactly() {
+        val qr = "upi://pay?pa=ravi.k@okaxis&pn=Ravi%20Kumar&mode=02&purpose=00"
+        val p = (ok(qr).withAmount("150") as UpiPayment.Parsed.Ok).payment
+        assertEquals("$qr&cu=INR&am=150.00", p.raw)
+        assertEquals("150.00", p.amount)
+    }
+
+    @Test fun withAmountReplacesZeroAmountAndKeepsCurrency() {
+        val p = (ok("upi://pay?pa=a@ybl&am=0&cu=INR&tn=Hi").withAmount("99.5") as UpiPayment.Parsed.Ok).payment
+        assertEquals("upi://pay?pa=a@ybl&cu=INR&tn=Hi&am=99.50", p.raw)
+    }
+
+    @Test fun withAmountRejectsZeroAndGarbage() {
+        val p = ok("upi://pay?pa=a@ybl")
+        assertTrue(p.withAmount("0") is UpiPayment.Parsed.Failed)
+        assertTrue(p.withAmount("") is UpiPayment.Parsed.Failed)
+        assertTrue(p.withAmount("12.345") is UpiPayment.Parsed.Failed)
+    }
+
     @Test fun buildsManualPaymentWithEncoding() {
         val p = (UpiPayment.build("friend@okhdfcbank", "Ravi K", "100", "Dinner & movie") as UpiPayment.Parsed.Ok).payment
         assertEquals("upi://pay?pa=friend@okhdfcbank&pn=Ravi%20K&am=100&cu=INR&tn=Dinner%20%26%20movie", p.raw)

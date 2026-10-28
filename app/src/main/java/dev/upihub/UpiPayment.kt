@@ -34,6 +34,24 @@ data class UpiPayment(
         data class Failed(val error: ParseError) : Parsed()
     }
 
+    /**
+     * Returns this payment with the payer-entered [value] as its amount. Only
+     * used for codes without one: some UPI apps lock the amount field for
+     * links from other apps, so it has to be in the link. Every other
+     * parameter is kept byte-for-byte; a zero `am` is replaced.
+     */
+    fun withAmount(value: String): Parsed {
+        val am = value.trim()
+        if (!isValidAmount(am) || BigDecimal(am).signum() <= 0) return Parsed.Failed(ParseError.InvalidAmount(am))
+        val q = raw.indexOf('?')
+        val base = if (q < 0) raw else raw.substring(0, q)
+        val params = (if (q < 0) "" else raw.substring(q + 1)).split('&')
+            .filter { it.isNotEmpty() && keyOf(it) != "am" }
+        val withCurrency = if (params.any { keyOf(it) == "cu" }) params else params + "cu=INR"
+        val formatted = BigDecimal(am).setScale(2).toPlainString()
+        return parse("$base?" + (withCurrency + "am=$formatted").joinToString("&"))
+    }
+
     companion object {
         private val SCHEME = Regex("^upi://([^/?#]+)/?(?:\\?(.*))?$", RegexOption.IGNORE_CASE)
         private val VPA = Regex("^[A-Za-z0-9._-]{1,256}@[A-Za-z0-9.-]{2,64}$")
@@ -77,6 +95,8 @@ data class UpiPayment(
         }
 
         fun isValidAmount(value: String): Boolean = Regex("^\\d{1,9}(\\.\\d{1,2})?$").matches(value)
+
+        private fun keyOf(part: String): String = decode(part.substringBefore('=')).lowercase()
 
         /** First value wins for repeated keys; keys are case-insensitive. */
         private fun parseQuery(query: String): Map<String, String> {

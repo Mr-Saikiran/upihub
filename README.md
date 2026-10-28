@@ -24,7 +24,14 @@ Application ID: `techswitch.upihub` · min Android 7.0 (API 24) · target API 36
   flashlight and a scan-window overlay. The same code does not reopen the
   chooser right after you cancel or return from a payment.
 - **App chooser** — the nine apps, default first; apps that are not installed
-  open their Play Store page.
+  open their Play Store page. The list scrolls so the pay button always stays
+  on screen.
+- **Amount entry for codes without one** — personal QR codes usually carry no
+  amount, and some apps (e.g. Kiwi) lock the amount field for links opened
+  from another app. UPI Hub asks for the amount and adds it to the link; codes
+  that already carry an amount are forwarded untouched.
+- **Home-screen widget** — a one-tap "Scan & Pay" icon (Settings → Add scan
+  widget, or long-press the home screen → Widgets → UPI Hub).
 - **Default app** — Kiwi out of the box; change it from the home card,
   settings, or "Make this my default" in the chooser.
 - **Ask every time** — turn off to open the default app directly.
@@ -39,7 +46,8 @@ Application ID: `techswitch.upihub` · min Android 7.0 (API 24) · target API 36
 
 UPI Hub never touches money, PINs or bank credentials and has no server. It
 uses the standard NPCI UPI deep-link intent: the scanned `upi://pay?...` text is
-forwarded **unchanged** to the chosen app with `Intent.setPackage(...)`, so
+forwarded **unchanged** (apart from an amount the payer enters for codes
+without one) to the chosen app with `Intent.setPackage(...)`, so
 merchant fields and QR signatures stay valid. The only permission is the camera.
 
 Source layout (`app/src/main/java/dev/upihub/`): `UpiPayment` parses and builds

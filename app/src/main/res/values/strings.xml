@@ -20,6 +20,12 @@
     <string name="cancel">Cancel</string>
     <string name="pay">Continue</string>
     <string name="pay_with">Continue with %1$s</string>
+    <string name="pay_amount_with">Pay ₹%1$s with %2$s</string>
+    <string name="enter_amount">Enter amount</string>
+    <string name="widget_label">Scan &amp; Pay</string>
+    <string name="widget_description">Open the UPI Hub scanner from your home screen</string>
+    <string name="add_widget">Add scan widget to home screen</string>
+    <string name="add_widget_manual">Long-press your home screen, tap Widgets, then pick UPI Hub.</string>
     <string name="camera_needed_title">Scan with your camera</string>
     <string name="camera_needed_body">UPI Hub needs the camera to read QR codes. Photos are never saved or sent anywhere.</string>
     <string name="allow_camera">Allow camera</string>
