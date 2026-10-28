@@ -24,13 +24,12 @@ val signing: Map<String, String?> = run {
 val hasReleaseSigning = signing.values.all { !it.isNullOrBlank() }
 
 android {
-    // `switch` is a Java keyword, so it cannot be a package for generated Java
-    // sources (ViewBinding); only the published application ID uses it.
+    // Code package; the published identity is applicationId below.
     namespace = "dev.upihub"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "switch.upihub"
+        applicationId = "techswitch.upihub"
         minSdk = 24
         targetSdk = 36
         versionCode = 1

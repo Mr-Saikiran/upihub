@@ -4,7 +4,7 @@ One scanner for all your UPI apps. Open the app and it is already scanning;
 point it at any UPI QR code and pick which app pays — **Kiwi** is preselected.
 The chosen app asks for your UPI PIN and completes the payment.
 
-Application ID: `switch.upihub` · min Android 7.0 (API 24) · target API 36
+Application ID: `techswitch.upihub` · min Android 7.0 (API 24) · target API 36
 
 | App | Package (verified on Google Play India) |
 |---|---|
