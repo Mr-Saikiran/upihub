@@ -8,11 +8,12 @@ import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Build
 
+/** An installed app that handles `upi://pay`. [visible] apps appear in the payment list. */
 data class UpiApp(
     val packageName: String,
     val label: String,
-    val installed: Boolean,
     val preferred: Boolean,
+    val visible: Boolean,
     val icon: Drawable?,
 )
 
@@ -41,38 +42,33 @@ object UpiApps {
     fun iconFor(context: Context, packageName: String): Drawable? = loadIcon(context.packageManager, packageName)
 
     /**
-     * Lists the preferred apps (installed or not) followed, when [includeOthers]
-     * is set, by any other installed app that handles `upi://pay`. The
-     * [defaultPackage] is always first.
+     * Every installed UPI app, in the user's order. Apps the user never
+     * arranged (first run, or newly installed) follow it: the default app,
+     * then the preferred apps in [PREFERRED] order, then the rest A–Z.
+     * Apps that are not installed are never listed.
      */
-    fun discover(context: Context, defaultPackage: String, includeOthers: Boolean): List<UpiApp> {
+    fun discover(context: Context, prefs: Prefs): List<UpiApp> {
         val pm = context.packageManager
         val handlers = queryHandlers(pm)
             .map { it.activityInfo.packageName }
             .filter { it != context.packageName }
             .toSet()
+        val default = prefs.defaultPackage
 
-        val preferred = PREFERRED.map { p ->
-            val installed = p.packageName in handlers
-            UpiApp(
-                packageName = p.packageName,
-                label = p.label,
-                installed = installed,
-                preferred = true,
-                icon = if (installed) loadIcon(pm, p.packageName) else null,
-            )
+        val preferred = PREFERRED.filter { it.packageName in handlers }.map { p ->
+            UpiApp(p.packageName, p.label, preferred = true, visible = false, icon = loadIcon(pm, p.packageName))
         }
-        val others = if (!includeOthers) emptyList() else handlers
+        val others = handlers
             .filter { pkg -> PREFERRED.none { it.packageName == pkg } }
-            .map { pkg ->
-                UpiApp(pkg, loadLabel(pm, pkg), installed = true, preferred = false, icon = loadIcon(pm, pkg))
-            }
+            .map { pkg -> UpiApp(pkg, loadLabel(pm, pkg), preferred = false, visible = false, icon = loadIcon(pm, pkg)) }
             .sortedBy { it.label.lowercase() }
+        val baseline = (preferred + others).sortedByDescending { it.packageName == default }
 
-        return (preferred + others).sortedWith(
-            compareByDescending<UpiApp> { it.packageName == defaultPackage }
-                .thenByDescending { it.installed },
-        )
+        val order = prefs.appOrder
+        // Stable sort: arranged apps by their saved position, the rest keep the baseline order after them.
+        return baseline
+            .sortedBy { app -> order.indexOf(app.packageName).let { if (it < 0) Int.MAX_VALUE else it } }
+            .map { it.copy(visible = it.packageName == default || prefs.isVisible(it.packageName, it.preferred)) }
     }
 
     private fun queryHandlers(pm: PackageManager): List<ResolveInfo> {

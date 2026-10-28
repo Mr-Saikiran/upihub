@@ -278,8 +278,12 @@ class MainActivity : AppCompatActivity() {
         }
         s.alwaysAskSwitch.isChecked = prefs.alwaysAsk
         s.alwaysAskSwitch.setOnCheckedChangeListener { _, v -> prefs.alwaysAsk = v }
-        s.showOthersSwitch.isChecked = prefs.showOtherApps
-        s.showOthersSwitch.setOnCheckedChangeListener { _, v -> prefs.showOtherApps = v }
+        val apps = UpiApps.discover(this, prefs)
+        s.appsValue.text = getString(R.string.apps_shown_count, apps.count { it.visible }, apps.size)
+        s.appsRow.setOnClickListener {
+            dialog.dismiss()
+            startActivity(Intent(this, ManageAppsActivity::class.java))
+        }
         s.addWidgetButton.setOnClickListener {
             if (!ScanWidgetProvider.requestPin(this)) {
                 Toast.makeText(this, R.string.add_widget_manual, Toast.LENGTH_LONG).show()
@@ -294,14 +298,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun chooseDefault(onChanged: () -> Unit = {}) {
-        val apps = UpiApps.discover(this, prefs.defaultPackage, prefs.showOtherApps)
-        val labels = apps.map { if (it.installed) it.label else "${it.label} · ${getString(R.string.not_installed)}" }
-            .toTypedArray()
+        val apps = UpiApps.discover(this, prefs)
+        if (apps.isEmpty()) {
+            Toast.makeText(this, R.string.no_upi_apps, Toast.LENGTH_LONG).show()
+            return
+        }
+        val labels = apps.map { it.label }.toTypedArray()
         val current = apps.indexOfFirst { it.packageName == prefs.defaultPackage }
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.default_app)
             .setSingleChoiceItems(labels, current) { dialog, which ->
                 prefs.defaultPackage = apps[which].packageName
+                prefs.setVisible(apps[which].packageName, true)
                 dialog.dismiss()
                 refreshDefaultApp()
                 onChanged()

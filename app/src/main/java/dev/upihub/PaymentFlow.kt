@@ -30,8 +30,7 @@ class PaymentFlow(
     private val onCancel: () -> Unit,
 ) {
     fun start(payment: UpiPayment) {
-        val apps = UpiApps.discover(activity, prefs.defaultPackage, prefs.showOtherApps)
-        val installed = apps.filter { it.installed }
+        val installed = UpiApps.discover(activity, prefs)
         if (installed.isEmpty()) {
             MaterialAlertDialogBuilder(activity)
                 .setMessage(R.string.no_upi_apps)
@@ -41,13 +40,15 @@ class PaymentFlow(
                 .show()
             return
         }
-        val default = installed.firstOrNull { it.packageName == prefs.defaultPackage }
+        // Hidden apps stay out of the list; should every app be hidden, show them all rather than none.
+        val apps = installed.filter { it.visible }.ifEmpty { installed }
+        val default = apps.firstOrNull { it.packageName == prefs.defaultPackage }
         // Without an amount the sheet is still needed to collect one.
         if (!prefs.alwaysAsk && default != null && payment.amount != null) {
             pay(payment, default.packageName)
             return
         }
-        showChooser(payment, apps, default?.packageName ?: installed.first().packageName)
+        showChooser(payment, apps, default?.packageName ?: apps.first().packageName)
     }
 
     private fun showChooser(payment: UpiPayment, apps: List<UpiApp>, initial: String) {
@@ -89,12 +90,8 @@ class PaymentFlow(
         b.amountInput.doAfterTextChanged { refreshButton() }
 
         val adapter = AppAdapter(apps, { selected }) { app ->
-            if (app.installed) {
-                selected = app.packageName
-                refreshButton()
-            } else {
-                openStore(app.packageName)
-            }
+            selected = app.packageName
+            refreshButton()
         }
         b.appList.layoutManager = LinearLayoutManager(activity)
         b.appList.adapter = adapter
@@ -154,14 +151,10 @@ class PaymentFlow(
             val app = apps[position]
             val isSelected = app.packageName == selected()
             holder.b.label.text = app.label
-            holder.b.status.text = when {
-                !app.installed -> activity.getString(R.string.not_installed)
-                app.packageName == prefs.defaultPackage -> activity.getString(R.string.default_label)
-                else -> activity.getString(R.string.installed)
-            }
+            holder.b.status.visibility =
+                if (app.packageName == prefs.defaultPackage) ViewGroup.VISIBLE else ViewGroup.GONE
             if (app.icon != null) holder.b.icon.setImageDrawable(app.icon)
             else holder.b.icon.setImageResource(android.R.drawable.sym_def_app_icon)
-            holder.b.root.alpha = if (app.installed) 1f else 0.55f
             holder.b.check.visibility = if (isSelected) ViewGroup.VISIBLE else ViewGroup.INVISIBLE
             val density = activity.resources.displayMetrics.density
             holder.b.card.strokeWidth = ((if (isSelected) 2 else 1) * density).toInt()

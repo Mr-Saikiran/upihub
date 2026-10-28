@@ -50,7 +50,7 @@ class AppWorkflowTest {
     private val merchantQr = "upi://pay?pa=chaipoint.blr@okaxis&pn=Chai%20Point&mc=5812&tr=TR42&am=149.00&cu=INR&sign=AbC%2B%3D"
 
     @Before fun installFakeUpiApps() {
-        // A subset is "installed" so the chooser shows both states.
+        // A subset is installed: INDmoney, MobiKwik, Jupiter and BHIM are not.
         installUpiApp("in.gokiwi.kiwitpap", "Kiwi", Color.rgb(0x12, 0xB7, 0x6A))
         installUpiApp("net.one97.paytm", "Paytm", Color.rgb(0x00, 0x2E, 0x6E))
         installUpiApp("com.dreamplug.androidapp", "CRED", Color.rgb(0x22, 0x22, 0x22))
@@ -100,7 +100,8 @@ class AppWorkflowTest {
         val list = sheet.findViewById<RecyclerView>(R.id.appList)!!
         val pay = sheet.findViewById<Button>(R.id.payButton)!!
         assertEquals("Continue with Kiwi", pay.text.toString())
-        assertEquals(UpiApps.PREFERRED.size, list.adapter!!.itemCount)
+        // Only installed apps are listed: no BHIM, INDmoney, MobiKwik or Jupiter.
+        assertEquals(listOf("Kiwi", "Paytm", "CRED", "Google Pay", "PhonePe"), chooserLabels(sheet))
         capture(activity.window.decorView, "03-chooser", dialog = sheet.window!!.decorView)
 
         pay.performClick()
@@ -119,8 +120,7 @@ class AppWorkflowTest {
         val list = sheet.findViewById<RecyclerView>(R.id.appList)!!
         list.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
         list.layout(0, 0, 1080, list.measuredHeight)
-        val paytmIndex = UpiApps.discover(activity, Prefs(activity).defaultPackage, false)
-            .indexOfFirst { it.packageName == "net.one97.paytm" }
+        val paytmIndex = chooserLabels(sheet).indexOf("Paytm")
         list.findViewHolderForAdapterPosition(paytmIndex)!!.itemView.performClick()
         val pay = sheet.findViewById<Button>(R.id.payButton)!!
         assertEquals("Continue with Paytm", pay.text.toString())
@@ -186,8 +186,10 @@ class AppWorkflowTest {
         installUpiApp("in.indwealth", "INDmoney", Color.BLACK)
         installUpiApp("com.mobikwik_new", "MobiKwik", Color.rgb(0x10, 0x5B, 0xE8))
         installUpiApp("money.jupiter", "Jupiter", Color.rgb(0xF2, 0x6B, 0x5B))
-        installUpiApp("com.example.otherupi", "Other UPI", Color.rgb(0xF0, 0xA0, 0x40))
-        Prefs(app).showOtherApps = true
+        for (n in 1..3) {
+            installUpiApp("com.example.otherupi$n", "Other UPI $n", Color.rgb(0xF0, 0xA0, 0x40))
+            Prefs(app).setVisible("com.example.otherupi$n", true)
+        }
         val personalQr = "upi://pay?pa=ravi.k@okaxis&pn=Ravi%20Kumar"
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         activity.startPayment((UpiPayment.parse(personalQr) as UpiPayment.Parsed.Ok).payment)
@@ -195,7 +197,7 @@ class AppWorkflowTest {
 
         val sheet = ShadowDialog.getLatestDialog() as BottomSheetDialog
         val list = sheet.findViewById<RecyclerView>(R.id.appList)!!
-        assertEquals(UpiApps.PREFERRED.size + 1, list.adapter!!.itemCount)
+        assertEquals(11, list.adapter!!.itemCount)
         val pay = sheet.findViewById<Button>(R.id.payButton)!!
         val window = sheet.window!!.decorView
         val loc = IntArray(2)
@@ -203,6 +205,60 @@ class AppWorkflowTest {
         assertTrue("button bottom ${loc[1] + pay.height} > window ${window.height}", loc[1] + pay.height <= window.height)
         assertTrue("button not laid out", pay.height > 0)
         capture(activity.window.decorView, "06-chooser-many-apps", dialog = window)
+    }
+
+    @Test fun hidingAnAppInManagerRemovesItFromPaymentList() {
+        val manager = Robolectric.buildActivity(ManageAppsActivity::class.java).setup().get()
+        idle()
+        assertEquals(listOf("Kiwi", "Paytm", "CRED", "Google Pay", "PhonePe"), managerLabels(manager))
+        managerSwitch(manager, "Paytm").performClick()
+        idle()
+        assertEquals("Hidden", managerRow(manager, "Paytm").findViewById<android.widget.TextView>(R.id.status).text.toString())
+
+        assertEquals(listOf("Kiwi", "CRED", "Google Pay", "PhonePe"), openChooserLabels())
+    }
+
+    @Test fun otherUpiAppsAreHiddenUntilAdded() {
+        installUpiApp("com.example.otherupi", "Other UPI", Color.rgb(0xF0, 0xA0, 0x40))
+        assertTrue("Other UPI" !in openChooserLabels())
+
+        val manager = Robolectric.buildActivity(ManageAppsActivity::class.java).setup().get()
+        idle()
+        assertFalse(managerSwitch(manager, "Other UPI").isChecked)
+        managerSwitch(manager, "Other UPI").performClick()
+        idle()
+        assertTrue("Other UPI" in openChooserLabels())
+    }
+
+    @Test fun defaultAppCannotBeHidden() {
+        val manager = Robolectric.buildActivity(ManageAppsActivity::class.java).setup().get()
+        idle()
+        assertEquals(View.INVISIBLE, managerSwitch(manager, "Kiwi").visibility)
+        assertEquals("Default · always shown",
+            managerRow(manager, "Kiwi").findViewById<android.widget.TextView>(R.id.status).text.toString())
+    }
+
+    @Test fun sortAndDragReorderThePaymentList() {
+        val manager = Robolectric.buildActivity(ManageAppsActivity::class.java).setup().get()
+        idle()
+        manager.findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar)
+            .menu.performIdentifierAction(R.id.sortAz, 0)
+        idle()
+        val sorted = listOf("CRED", "Google Pay", "Kiwi", "Paytm", "PhonePe")
+        assertEquals(sorted, managerLabels(manager))
+        assertEquals(sorted, openChooserLabels())
+
+        // Drag PhonePe to the top.
+        manager.move(4, 0)
+        manager.saveOrder()
+        assertEquals(listOf("PhonePe", "CRED", "Google Pay", "Kiwi", "Paytm"), openChooserLabels())
+        capture(manager.window.decorView, "08-manage-apps")
+
+        // Reset restores the default order.
+        manager.findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar)
+            .menu.performIdentifierAction(R.id.resetList, 0)
+        idle()
+        assertEquals(listOf("Kiwi", "Paytm", "CRED", "Google Pay", "PhonePe"), openChooserLabels())
     }
 
     @Test fun homeScreenWidgetOpensScanner() {
@@ -247,6 +303,44 @@ class AppWorkflowTest {
     }
 
     // ---- helpers ----
+
+    private fun chooserLabels(sheet: BottomSheetDialog): List<String> {
+        val list = sheet.findViewById<RecyclerView>(R.id.appList)!!
+        list.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
+        list.layout(0, 0, 1080, list.measuredHeight)
+        return (0 until list.adapter!!.itemCount).map {
+            list.findViewHolderForAdapterPosition(it)!!.itemView.findViewById<android.widget.TextView>(R.id.label).text.toString()
+        }
+    }
+
+    /** Opens the chooser for a merchant QR on a fresh home screen and returns its app labels. */
+    private fun openChooserLabels(): List<String> {
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        activity.startPayment((UpiPayment.parse(merchantQr) as UpiPayment.Parsed.Ok).payment)
+        idle()
+        val sheet = ShadowDialog.getLatestDialog() as BottomSheetDialog
+        return chooserLabels(sheet).also { sheet.dismiss(); idle() }
+    }
+
+    private fun managerList(manager: ManageAppsActivity) = manager.findViewById<RecyclerView>(R.id.appList).also {
+        it.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
+        it.layout(0, 0, 1080, it.measuredHeight)
+    }
+
+    private fun managerLabels(manager: ManageAppsActivity): List<String> {
+        val list = managerList(manager)
+        return (0 until list.adapter!!.itemCount).map {
+            list.findViewHolderForAdapterPosition(it)!!.itemView.findViewById<android.widget.TextView>(R.id.label).text.toString()
+        }
+    }
+
+    private fun managerRow(manager: ManageAppsActivity, label: String): View {
+        val list = managerList(manager)
+        return list.findViewHolderForAdapterPosition(managerLabels(manager).indexOf(label))!!.itemView
+    }
+
+    private fun managerSwitch(manager: ManageAppsActivity, label: String) =
+        managerRow(manager, label).findViewById<com.google.android.material.materialswitch.MaterialSwitch>(R.id.visibleSwitch)
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 

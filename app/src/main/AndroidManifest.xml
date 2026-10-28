@@ -64,6 +64,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".ManageAppsActivity"
+            android:exported="false"
+            android:label="@string/manage_apps"
+            android:parentActivityName=".MainActivity" />
+
         <receiver
             android:name=".ScanWidgetProvider"
             android:exported="false"

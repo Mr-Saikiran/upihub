@@ -23,13 +23,17 @@ Application ID: `techswitch.upihub` · min Android 7.0 (API 24) · target API 36
 - **Opens into a live QR scanner** (asks for the camera on first launch), with
   flashlight and a scan-window overlay. The same code does not reopen the
   chooser right after you cancel or return from a payment.
-- **App chooser** — the nine apps, default first; apps that are not installed
-  open their Play Store page. The list scrolls so the pay button always stays
+- **App chooser** — your installed payment apps in your order, default
+  preselected. The list scrolls so the pay button always stays
   on screen.
 - **Amount entry for codes without one** — personal QR codes usually carry no
   amount, and some apps (e.g. Kiwi) lock the amount field for links opened
   from another app. UPI Hub asks for the amount and adds it to the link; codes
   that already carry an amount are forwarded untouched.
+- **Payment apps** (Settings) — drag to reorder, switch apps on or off, sort
+  A–Z or reset. Only installed apps are listed; the nine supported apps are
+  shown by default and other UPI apps (e.g. Amazon Pay) can be switched on.
+  The default app is always shown.
 - **Home-screen widget** — a one-tap "Scan & Pay" icon (Settings → Add scan
   widget, or long-press the home screen → Widgets → UPI Hub).
 - **Default app** — Kiwi out of the box; change it from the home card,
