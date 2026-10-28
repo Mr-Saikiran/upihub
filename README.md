@@ -1,12 +1,12 @@
-# UPI Hub (draft)
+# UPI Hub
 
-One place to pay with any of your UPI apps. Scan a UPI QR code (or type a UPI
-ID) and UPI Hub asks which app should pay — **Kiwi** is preselected — then
-hands the payment to that app, which asks for your UPI PIN as usual.
+One scanner for all your UPI apps. Open the app and it is already scanning;
+point it at any UPI QR code and pick which app pays — **Kiwi** is preselected.
+The chosen app asks for your UPI PIN and completes the payment.
 
-Supported apps (package IDs verified on Google Play India):
+Application ID: `switch.upihub` · min Android 7.0 (API 24) · target API 36
 
-| App | Package |
+| App | Package (verified on Google Play India) |
 |---|---|
 | Kiwi (default) | `in.gokiwi.kiwitpap` |
 | INDmoney | `in.indwealth` |
@@ -14,52 +14,81 @@ Supported apps (package IDs verified on Google Play India):
 | CRED | `com.dreamplug.androidapp` |
 | MobiKwik | `com.mobikwik_new` |
 | Jupiter | `money.jupiter` |
+| Google Pay | `com.google.android.apps.nbu.paisa.user` |
+| PhonePe | `com.phonepe.app` |
+| BHIM | `in.org.npci.upiapp` |
 
 ## Features
 
-- **Scan & Pay** — QR scanner (ZXing); non-UPI codes are rejected with a reason.
-- **App chooser** — bottom sheet listing the six apps, default first; apps that
-  are not installed are greyed out and open their Play Store page.
-- **Default app** — Kiwi out of the box; change it in settings or tick
-  "Make this my default" in the chooser.
-- **Ask every time** switch — turn off to open the default app directly.
-- **Pay to UPI ID** — manual entry (UPI ID, name, amount, note).
-- **Pay from QR screenshot** — pick an image (system photo picker, no storage
-  permission) or *Share* it to UPI Hub from WhatsApp, Gallery, etc.
+- **Opens into a live QR scanner** (asks for the camera on first launch), with
+  flashlight and a scan-window overlay. The same code does not reopen the
+  chooser right after you cancel or return from a payment.
+- **App chooser** — the nine apps, default first; apps that are not installed
+  open their Play Store page.
+- **Default app** — Kiwi out of the box; change it from the home card,
+  settings, or "Make this my default" in the chooser.
+- **Ask every time** — turn off to open the default app directly.
+- **Pay from screenshot** — system photo picker (no storage permission) or
+  *Share* an image to UPI Hub.
+- **Pay to UPI ID** — manual entry with amount and note.
 - **Handles `upi://pay` links** from browsers/other apps and relays the paying
   app's result back to the caller.
-- Optional: show other installed UPI apps (GPay, PhonePe, BHIM, ...).
+- Light and dark themes; adaptive launcher icon.
 
 ## How it works
 
-UPI Hub never touches money, PINs, or bank credentials and has no server. It
+UPI Hub never touches money, PINs or bank credentials and has no server. It
 uses the standard NPCI UPI deep-link intent: the scanned `upi://pay?...` text is
-forwarded **byte-for-byte** to the chosen app with `Intent.setPackage(...)`, so
-merchant fields and QR signatures stay intact. The only permission is the
-camera.
+forwarded **unchanged** to the chosen app with `Intent.setPackage(...)`, so
+merchant fields and QR signatures stay valid. The only permission is the camera.
 
-## Build
+Source layout (`app/src/main/java/dev/upihub/`): `UpiPayment` parses and builds
+payment links, `UpiResponse` reads the app's result, `UpiApps` discovers
+installed apps, `PaymentFlow` is the chooser, `MainActivity` the scanner home,
+`RouterActivity` the `upi://` link handler.
 
-Requires JDK 17+ and the Android SDK (platform 35).
+## Build and test
+
+Requires JDK 17+ and the Android SDK (platform 36).
 
 ```bash
 echo "sdk.dir=$ANDROID_HOME" > local.properties
-./gradlew testDebugUnitTest assembleDebug
-# APK: app/build/outputs/apk/debug/app-debug.apk
+./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-Install: `adb install app/build/outputs/apk/debug/app-debug.apk`, or copy the
-APK to the phone and allow "Install unknown apps" for your file manager.
+Unit tests include Robolectric workflow tests that drive the real activities
+(chooser, default app, intent sent to the paying app, `upi://` relay) and write
+screenshots to `app/build/screenshots/`. If Maven Central rate-limits
+Robolectric's runtime download, add
+`-ProbolectricRepo=https://maven-central.storage-download.googleapis.com/maven2`.
+
+## Release signing (Google Play)
+
+Create `keystore.properties` in the project root (git-ignored):
+
+```properties
+storeFile=/absolute/path/to/upihub-upload.jks
+storePassword=...
+keyAlias=upload
+keyPassword=...
+```
+
+Then `./gradlew bundleRelease` produces the signed Play bundle at
+`app/build/outputs/bundle/release/app-release.aab` (`assembleRelease` gives a
+signed APK). Enrol in **Play App Signing** when creating the app: this key is
+then only the *upload* key and can be reset through Play support if lost.
+
+CI (`.github/workflows/android.yml`) tests and builds a debug APK on every
+push. Pushing a `v*` tag also builds the signed release when these repository
+secrets exist: `UPIHUB_KEYSTORE_BASE64` (`base64 -w0 upihub-upload.jks`),
+`UPIHUB_KEYSTORE_PASSWORD`, `UPIHUB_KEY_ALIAS`, `UPIHUB_KEY_PASSWORD`.
 
 ## Known limitations
 
 - Some UPI apps restrict or block intent-based payments to **personal** UPI IDs
-  (P2P) for fraud prevention; merchant QR codes generally work. Behaviour is
-  decided by each app and can change.
-- A bare mobile number is not a UPI address; enter the full ID (e.g.
-  `98xxxxxxxx@paytm`).
-- Not all apps return a transaction status; UPI Hub then shows "status not
-  reported" instead of guessing.
-- NFC "UPI Tap & Pay" is not supported: it is implemented inside each PSP app
-  and is not exposed to third-party apps.
-- Debug-signed draft. Not tested on a physical device yet.
+  (P2P) for fraud prevention; merchant QR codes generally work. Each app decides.
+- A bare mobile number is not a UPI address; enter the full ID.
+- Not all apps return a transaction status; UPI Hub then says so rather than guessing.
+- NFC "UPI Tap & Pay" is implemented inside each payment app and is not exposed
+  to other apps.
+- Verified with unit and Robolectric tests only; not yet run on a physical device.

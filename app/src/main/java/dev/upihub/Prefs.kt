@@ -18,14 +18,15 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_SHOW_OTHERS, false)
         set(value) = sp.edit().putBoolean(KEY_SHOW_OTHERS, value).apply()
 
-    var askedCameraOnce: Boolean
-        get() = sp.getBoolean(KEY_ASKED_CAMERA, false)
-        set(value) = sp.edit().putBoolean(KEY_ASKED_CAMERA, value).apply()
+    /** Set when the user denied the camera and Android will no longer show the prompt. */
+    var cameraBlocked: Boolean
+        get() = sp.getBoolean(KEY_CAMERA_BLOCKED, false)
+        set(value) = sp.edit().putBoolean(KEY_CAMERA_BLOCKED, value).apply()
 
     private companion object {
         const val KEY_DEFAULT = "default_package"
         const val KEY_ALWAYS_ASK = "always_ask"
         const val KEY_SHOW_OTHERS = "show_other_apps"
-        const val KEY_ASKED_CAMERA = "asked_camera_once"
+        const val KEY_CAMERA_BLOCKED = "camera_blocked"
     }
 }

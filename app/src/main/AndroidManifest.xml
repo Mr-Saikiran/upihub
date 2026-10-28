@@ -18,18 +18,24 @@
         <package android:name="com.dreamplug.androidapp" />
         <package android:name="com.mobikwik_new" />
         <package android:name="money.jupiter" />
+        <package android:name="com.google.android.apps.nbu.paisa.user" />
+        <package android:name="com.phonepe.app" />
+        <package android:name="in.org.npci.upiapp" />
     </queries>
 
     <application
         android:allowBackup="false"
-        android:icon="@drawable/ic_launcher"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.UpiHub">
 
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:screenOrientation="portrait"
+            tools:ignore="DiscouragedApi,LockedOrientationActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -58,10 +64,9 @@
             </intent-filter>
         </activity>
 
-        <!-- The library forces landscape; follow the device instead. -->
+        <!-- The scanner is embedded in MainActivity; drop the library's own screen. -->
         <activity
             android:name="com.journeyapps.barcodescanner.CaptureActivity"
-            android:screenOrientation="unspecified"
-            tools:replace="screenOrientation" />
+            tools:node="remove" />
     </application>
 </manifest>

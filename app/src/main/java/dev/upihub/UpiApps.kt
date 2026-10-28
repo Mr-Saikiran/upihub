@@ -27,12 +27,18 @@ object UpiApps {
         Preferred("com.dreamplug.androidapp", "CRED"),
         Preferred("com.mobikwik_new", "MobiKwik"),
         Preferred("money.jupiter", "Jupiter"),
+        Preferred("com.google.android.apps.nbu.paisa.user", "Google Pay"),
+        Preferred("com.phonepe.app", "PhonePe"),
+        Preferred("in.org.npci.upiapp", "BHIM"),
     )
 
     const val DEFAULT_PACKAGE = "in.gokiwi.kiwitpap"
 
     fun labelFor(packageName: String): String =
         PREFERRED.firstOrNull { it.packageName == packageName }?.label ?: packageName
+
+    /** The app's launcher icon, or null when it is not installed. */
+    fun iconFor(context: Context, packageName: String): Drawable? = loadIcon(context.packageManager, packageName)
 
     /**
      * Lists the preferred apps (installed or not) followed, when [includeOthers]

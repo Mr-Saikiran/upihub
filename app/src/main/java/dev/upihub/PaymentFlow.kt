@@ -9,7 +9,9 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.upihub.databinding.ItemAppBinding
 import dev.upihub.databinding.SheetChooserBinding
@@ -51,12 +53,14 @@ class PaymentFlow(
         var selected = initial
         var launched = false
 
-        b.payeeText.text = payment.payeeName ?: payment.payeeAddress
+        val title = payment.payeeName ?: payment.payeeAddress
+        b.avatar.text = title.first().uppercaseChar().toString()
+        b.payeeText.text = title
         b.detailText.text = listOfNotNull(
-            payment.amount?.let { "₹$it" },
             payment.payeeAddress.takeIf { payment.payeeName != null },
             payment.note,
         ).joinToString(" · ")
+        b.amountText.text = payment.amount?.let { "₹$it" }.orEmpty()
 
         fun refreshButton() {
             b.payButton.text = activity.getString(R.string.pay_with, apps.first { it.packageName == selected }.label)
@@ -83,6 +87,8 @@ class PaymentFlow(
         }
         dialog.setOnDismissListener { if (!launched) onCancel() }
         dialog.setContentView(b.root)
+        dialog.behavior.state = BottomSheetBehavior.STATE_EXPANDED
+        dialog.behavior.skipCollapsed = true
         dialog.show()
     }
 
@@ -91,7 +97,7 @@ class PaymentFlow(
         try {
             launch(intent)
         } catch (_: ActivityNotFoundException) {
-            Toast.makeText(activity, "${UpiApps.labelFor(packageName)} could not open this payment.", Toast.LENGTH_LONG).show()
+            Toast.makeText(activity, activity.getString(R.string.app_cannot_open, UpiApps.labelFor(packageName)), Toast.LENGTH_LONG).show()
             onCancel()
         }
     }
@@ -121,6 +127,7 @@ class PaymentFlow(
 
         override fun onBindViewHolder(holder: Holder, position: Int) {
             val app = apps[position]
+            val isSelected = app.packageName == selected()
             holder.b.label.text = app.label
             holder.b.status.text = when {
                 !app.installed -> activity.getString(R.string.not_installed)
@@ -129,9 +136,14 @@ class PaymentFlow(
             }
             if (app.icon != null) holder.b.icon.setImageDrawable(app.icon)
             else holder.b.icon.setImageResource(android.R.drawable.sym_def_app_icon)
-            holder.b.root.alpha = if (app.installed) 1f else 0.5f
-            holder.b.radio.visibility = if (app.installed) ViewGroup.VISIBLE else ViewGroup.INVISIBLE
-            holder.b.radio.isChecked = app.packageName == selected()
+            holder.b.root.alpha = if (app.installed) 1f else 0.55f
+            holder.b.check.visibility = if (isSelected) ViewGroup.VISIBLE else ViewGroup.INVISIBLE
+            val density = activity.resources.displayMetrics.density
+            holder.b.card.strokeWidth = ((if (isSelected) 2 else 1) * density).toInt()
+            holder.b.card.strokeColor = MaterialColors.getColor(
+                holder.b.card,
+                if (isSelected) androidx.appcompat.R.attr.colorPrimary else com.google.android.material.R.attr.colorOutline,
+            )
             holder.b.root.setOnClickListener {
                 val before = apps.indexOfFirst { it.packageName == selected() }
                 onClick(app)

@@ -1,123 +1,284 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="#000000"
+    android:orientation="vertical">
 
-    <LinearLayout
+    <FrameLayout
+        android:id="@+id/scannerArea"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="20dp">
+        android:layout_height="0dp"
+        android:layout_weight="1">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/scanButton"
+        <com.journeyapps.barcodescanner.BarcodeView
+            android:id="@+id/barcodeView"
             android:layout_width="match_parent"
-            android:layout_height="96dp"
-            android:text="@string/scan_and_pay"
-            android:textSize="22sp"
-            app:cornerRadius="20dp"
-            app:icon="@android:drawable/ic_menu_camera"
-            app:iconGravity="textStart" />
+            android:layout_height="match_parent"
+            app:zxing_framing_rect_height="@dimen/scan_frame"
+            app:zxing_framing_rect_width="@dimen/scan_frame"
+            app:zxing_use_texture_view="true" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/galleryButton"
-            style="@style/Widget.Material3.Button.OutlinedButton"
+        <dev.upihub.ScannerOverlayView
+            android:id="@+id/overlay"
             android:layout_width="match_parent"
-            android:layout_height="64dp"
-            android:layout_marginTop="12dp"
-            android:text="@string/scan_from_gallery"
-            app:cornerRadius="20dp" />
+            android:layout_height="match_parent" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/manualButton"
-            style="@style/Widget.Material3.Button.OutlinedButton"
+        <LinearLayout
+            android:id="@+id/permissionPanel"
             android:layout_width="match_parent"
-            android:layout_height="64dp"
-            android:layout_marginTop="12dp"
-            android:text="@string/pay_to_upi_id"
-            app:cornerRadius="20dp" />
+            android:layout_height="match_parent"
+            android:background="#0E0B1A"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="32dp"
+            android:visibility="gone">
 
-        <com.google.android.material.card.MaterialCardView
+            <ImageView
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_camera"
+                app:tint="#C9BCFF" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/camera_needed_title"
+                android:textAppearance="?attr/textAppearanceTitleLarge"
+                android:textColor="#FFFFFF" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:text="@string/camera_needed_body"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                android:textColor="#CCFFFFFF" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/allowCameraButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:text="@string/allow_camera" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/topBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            app:cardCornerRadius="16dp">
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="20dp"
+            android:paddingTop="12dp"
+            android:paddingEnd="8dp">
+
+            <ImageView
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:importantForAccessibility="no"
+                android:src="@mipmap/ic_launcher" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:text="@string/app_name"
+                android:textAppearance="?attr/textAppearanceTitleLarge"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/settingsButton"
+                style="@style/Widget.Material3.Button.IconButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/settings"
+                app:icon="@drawable/ic_settings"
+                app:iconTint="#FFFFFF" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/hintText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="124dp"
+            android:background="@drawable/bg_pill_dark"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="8dp"
+            android:text="@string/scan_hint"
+            android:textAppearance="?attr/textAppearanceLabelLarge"
+            android:textColor="#FFFFFF" />
+
+        <LinearLayout
+            android:id="@+id/cameraActions"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="48dp"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/galleryButton"
+                style="@style/Widget.UpiHub.CameraButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/from_gallery"
+                app:icon="@drawable/ic_photo" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/torchButton"
+                style="@style/Widget.UpiHub.CameraButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:contentDescription="@string/torch"
+                app:icon="@drawable/ic_flash_off" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <LinearLayout
+        android:id="@+id/panel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="-28dp"
+        android:background="@drawable/bg_panel"
+        android:elevation="8dp"
+        android:orientation="vertical"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="20dp">
+
+        <View
+            android:layout_width="32dp"
+            android:layout_height="4dp"
+            android:layout_gravity="center_horizontal"
+            android:background="@drawable/bg_handle" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/defaultAppCard"
+            style="@style/Widget.Material3.CardView.Filled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            app:cardBackgroundColor="?attr/colorSurfaceContainer"
+            app:cardCornerRadius="20dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="14dp">
+
+                <ImageView
+                    android:id="@+id/defaultAppIcon"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:importantForAccessibility="no" />
 
                 <LinearLayout
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
+                    android:layout_marginStart="14dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
 
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/default_app"
-                            android:textAppearance="?attr/textAppearanceLabelMedium" />
-
-                        <TextView
-                            android:id="@+id/defaultAppText"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:textAppearance="?attr/textAppearanceTitleLarge" />
-                    </LinearLayout>
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/changeDefaultButton"
-                        style="@style/Widget.Material3.Button.TextButton"
+                    <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/change" />
+                        android:text="@string/pays_with"
+                        android:textAppearance="?attr/textAppearanceLabelMedium"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
+
+                    <TextView
+                        android:id="@+id/defaultAppText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textAppearance="?attr/textAppearanceTitleMedium"
+                        android:textStyle="bold" />
                 </LinearLayout>
 
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/alwaysAskSwitch"
-                    android:layout_width="match_parent"
+                <TextView
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/ask_every_time" />
+                    android:text="@string/change"
+                    android:textAppearance="?attr/textAppearanceLabelLarge"
+                    android:textColor="?attr/colorPrimary" />
 
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/showOthersSwitch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/show_other_apps" />
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ic_chevron_right"
+                    app:tint="?attr/colorPrimary" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <TextView
-            android:id="@+id/installedText"
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/manualButton"
+            style="@style/Widget.Material3.Button.TonalButton"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:textAppearance="?attr/textAppearanceBodyMedium" />
+            android:layout_height="56dp"
+            android:layout_marginTop="12dp"
+            android:text="@string/pay_to_upi_id"
+            app:cornerRadius="16dp"
+            app:icon="@drawable/ic_at"
+            app:iconGravity="textStart" />
 
-        <TextView
-            android:id="@+id/lastResultText"
+        <LinearLayout
+            android:id="@+id/resultRow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:textAppearance="?attr/textAppearanceBodyMedium"
-            android:visibility="gone" />
+            android:layout_marginTop="12dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
 
-        <TextView
+            <ImageView
+                android:id="@+id/resultIcon"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:importantForAccessibility="no" />
+
+            <TextView
+                android:id="@+id/resultText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:textAppearance="?attr/textAppearanceBodyMedium" />
+        </LinearLayout>
+
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="@string/disclaimer"
-            android:textAppearance="?attr/textAppearanceBodySmall" />
+            android:layout_marginTop="14dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_lock"
+                app:tint="?attr/colorOnSurfaceVariant" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:text="@string/disclaimer"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+        </LinearLayout>
     </LinearLayout>
-</ScrollView>
+</LinearLayout>

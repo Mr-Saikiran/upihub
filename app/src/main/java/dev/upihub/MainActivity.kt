@@ -3,36 +3,59 @@ package dev.upihub
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
+import android.provider.Settings
+import android.view.HapticFeedbackConstants
 import android.view.View
 import android.widget.Toast
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.journeyapps.barcodescanner.ScanContract
-import com.journeyapps.barcodescanner.ScanOptions
+import com.google.android.material.snackbar.Snackbar
+import com.google.zxing.BarcodeFormat
+import com.journeyapps.barcodescanner.BarcodeCallback
+import com.journeyapps.barcodescanner.DefaultDecoderFactory
 import dev.upihub.databinding.ActivityMainBinding
 import dev.upihub.databinding.DialogManualBinding
+import dev.upihub.databinding.SheetSettingsBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/**
+ * Opens straight into a live QR scanner. A UPI code found by the camera, a
+ * picked or shared screenshot, or a typed UPI ID all go through [PaymentFlow].
+ */
 class MainActivity : AppCompatActivity() {
     private lateinit var b: ActivityMainBinding
     private lateinit var prefs: Prefs
     private lateinit var flow: PaymentFlow
 
+    /** True while a chooser or payment app is handling a code; camera results are ignored. */
+    private var busy = false
+
+    /** The last code handled, ignored for a moment so it does not reopen the chooser at once. */
+    private var lastCode: String? = null
+    private var ignoreLastUntil = 0L
+    private var torchOn = false
+
     private val payLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         showResult(UpiResponse.parse(r.data?.getStringExtra("response")))
-    }
-
-    private val scanLauncher = registerForActivityResult(ScanContract()) { r ->
-        r.contents?.let(::handleScanned)
+        finishHandling(holdMillis = 5_000)
     }
 
     // System photo picker: no storage permission needed.
@@ -41,39 +64,130 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (!granted) Toast.makeText(this, R.string.camera_denied, Toast.LENGTH_LONG).show()
+        // Android stops showing the prompt after repeated denials; only Settings can grant it then.
+        prefs.cameraBlocked = !granted && !shouldShowRequestPermissionRationale(Manifest.permission.CAMERA)
+        updateCameraState()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
         b = ActivityMainBinding.inflate(layoutInflater)
         setContentView(b.root)
         prefs = Prefs(this)
-        flow = PaymentFlow(this, prefs, launch = { payLauncher.launch(it) }, onCancel = {})
+        flow = PaymentFlow(this, prefs, launch = { payLauncher.launch(it) }, onCancel = { finishHandling(holdMillis = 2_500) })
 
-        b.scanButton.setOnClickListener { startScan() }
+        ViewCompat.setOnApplyWindowInsetsListener(b.root) { _, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            b.topBar.updatePadding(top = bars.top + dp(12))
+            b.panel.updatePadding(bottom = bars.bottom + dp(20))
+            insets
+        }
+
+        b.barcodeView.decoderFactory = DefaultDecoderFactory(listOf(BarcodeFormat.QR_CODE))
+        b.barcodeView.decodeContinuous(BarcodeCallback { result -> result.text?.let(::onCameraCode) })
+
+        b.settingsButton.setOnClickListener { showSettings() }
+        b.defaultAppCard.setOnClickListener { chooseDefault() }
+        b.manualButton.setOnClickListener { showManualEntry() }
         b.galleryButton.setOnClickListener {
             pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         }
-        b.manualButton.setOnClickListener { showManualEntry() }
-        b.changeDefaultButton.setOnClickListener { chooseDefault() }
-        b.alwaysAskSwitch.isChecked = prefs.alwaysAsk
-        b.alwaysAskSwitch.setOnCheckedChangeListener { _, v -> prefs.alwaysAsk = v }
-        b.showOthersSwitch.isChecked = prefs.showOtherApps
-        b.showOthersSwitch.setOnCheckedChangeListener { _, v -> prefs.showOtherApps = v; refresh() }
+        b.torchButton.visibility =
+            if (packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH)) View.VISIBLE else View.GONE
+        b.torchButton.setOnClickListener { setTorch(!torchOn) }
+        b.allowCameraButton.setOnClickListener { requestCamera(fromButton = true) }
 
-        if (savedInstanceState == null) sharedImage(intent)?.let(::handleImage)
-
-        // Ask for the camera up front once, so the first scan opens immediately.
-        if (!hasCamera() && !prefs.askedCameraOnce) {
-            prefs.askedCameraOnce = true
-            cameraPermission.launch(Manifest.permission.CAMERA)
+        if (savedInstanceState == null) {
+            sharedImage(intent)?.let(::handleImage)
+            // Open straight into the scanner: ask for the camera on launch.
+            if (!hasCamera()) requestCamera(fromButton = false)
         }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         sharedImage(intent)?.let(::handleImage)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshDefaultApp()
+        updateCameraState()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        b.barcodeView.pause()
+        setTorch(false)
+    }
+
+    // ---- Camera ----
+
+    private fun hasCamera() =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+
+    private fun requestCamera(fromButton: Boolean) {
+        if (fromButton && prefs.cameraBlocked) {
+            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
+            return
+        }
+        cameraPermission.launch(Manifest.permission.CAMERA)
+    }
+
+    private fun updateCameraState() {
+        val granted = hasCamera()
+        b.permissionPanel.visibility = if (granted) View.GONE else View.VISIBLE
+        b.overlay.visibility = if (granted) View.VISIBLE else View.GONE
+        b.hintText.visibility = if (granted) View.VISIBLE else View.GONE
+        b.torchButton.isEnabled = granted
+        if (granted) {
+            b.barcodeView.resume()
+        } else {
+            b.barcodeView.pause()
+            b.allowCameraButton.setText(if (prefs.cameraBlocked) R.string.open_settings else R.string.allow_camera)
+        }
+    }
+
+    private fun setTorch(on: Boolean) {
+        if (torchOn == on) return
+        torchOn = on
+        if (hasCamera()) b.barcodeView.setTorch(on)
+        b.torchButton.setIconResource(if (on) R.drawable.ic_flash_on else R.drawable.ic_flash_off)
+    }
+
+    private fun onCameraCode(text: String) {
+        if (busy) return
+        if (text == lastCode && SystemClock.elapsedRealtime() < ignoreLastUntil) return
+        lastCode = text
+        when (val parsed = UpiPayment.parse(text)) {
+            is UpiPayment.Parsed.Ok -> {
+                b.root.performHapticFeedback(
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) HapticFeedbackConstants.CONFIRM
+                    else HapticFeedbackConstants.VIRTUAL_KEY,
+                )
+                startPayment(parsed.payment)
+            }
+            is UpiPayment.Parsed.Failed -> {
+                ignoreLastUntil = SystemClock.elapsedRealtime() + 3_000
+                Snackbar.make(b.root, parsed.error.message, Snackbar.LENGTH_SHORT).setAnchorView(b.panel).show()
+            }
+        }
+    }
+
+    // ---- Payment entry points ----
+
+    internal fun startPayment(payment: UpiPayment) {
+        busy = true
+        lastCode = payment.raw
+        b.overlay.setDetected(true)
+        flow.start(payment)
+    }
+
+    private fun finishHandling(holdMillis: Long) {
+        busy = false
+        ignoreLastUntil = SystemClock.elapsedRealtime() + holdMillis
+        b.overlay.setDetected(false)
     }
 
     private fun sharedImage(intent: Intent?): Uri? {
@@ -91,72 +205,51 @@ class MainActivity : AppCompatActivity() {
             val text = withContext(Dispatchers.Default) {
                 runCatching { QrImageDecoder.decode(contentResolver, uri) }.getOrNull()
             }
-            if (text == null) {
-                Toast.makeText(this@MainActivity, R.string.no_qr_in_image, Toast.LENGTH_LONG).show()
-            } else {
-                handleScanned(text)
+            when (val parsed = text?.let(UpiPayment::parse)) {
+                null -> Toast.makeText(this@MainActivity, R.string.no_qr_in_image, Toast.LENGTH_LONG).show()
+                is UpiPayment.Parsed.Ok -> startPayment(parsed.payment)
+                is UpiPayment.Parsed.Failed -> showParseError(parsed.error)
             }
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        refresh()
-    }
-
-    private fun refresh() {
-        b.defaultAppText.text = UpiApps.labelFor(prefs.defaultPackage)
-        val apps = UpiApps.discover(this, prefs.defaultPackage, prefs.showOtherApps)
-        b.installedText.text = apps.joinToString("\n") { "${if (it.installed) "✓" else "✗"}  ${it.label}" }
-    }
-
-    private fun hasCamera() =
-        ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-
-    private fun startScan() {
-        // CaptureActivity requests the camera itself if it is still missing.
-        scanLauncher.launch(
-            ScanOptions()
-                .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                .setPrompt(getString(R.string.scan_prompt))
-                .setBeepEnabled(false)
-                .setOrientationLocked(false),
-        )
-    }
-
-    private fun handleScanned(text: String) {
-        when (val parsed = UpiPayment.parse(text)) {
-            is UpiPayment.Parsed.Ok -> flow.start(parsed.payment)
-            is UpiPayment.Parsed.Failed -> MaterialAlertDialogBuilder(this)
-                .setTitle("Can't pay with this code")
-                .setMessage(parsed.error.message)
-                .setPositiveButton(android.R.string.ok, null)
-                .show()
-        }
+    private fun showParseError(error: UpiPayment.ParseError) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.cannot_pay_title)
+            .setMessage(error.message)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
     }
 
     private fun showManualEntry() {
         val d = DialogManualBinding.inflate(layoutInflater)
         val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.pay_to_upi_id)
+            .setIcon(R.drawable.ic_at)
             .setView(d.root)
             .setPositiveButton(R.string.pay, null)
             .setNegativeButton(R.string.cancel, null)
             .create()
         dialog.setOnShowListener {
-            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val id = d.upiIdInput.text?.toString().orEmpty().trim()
                 d.upiIdLayout.error = null
                 d.amountLayout.error = null
-                if (id.all { it.isDigit() } && id.isNotEmpty()) {
-                    // A bare mobile number is not a UPI address; the app must know the handle.
-                    d.upiIdLayout.error = "Enter the full UPI ID, e.g. $id@paytm"
+                if (id.isNotEmpty() && id.all { it.isDigit() }) {
+                    // A bare mobile number is not a UPI address; the handle is required.
+                    d.upiIdLayout.error = getString(R.string.full_upi_id_needed, id)
                     return@setOnClickListener
                 }
-                when (val parsed = UpiPayment.build(id, d.nameInput.text?.toString(), d.amountInput.text?.toString(), d.noteInput.text?.toString())) {
+                val parsed = UpiPayment.build(
+                    id,
+                    d.nameInput.text?.toString(),
+                    d.amountInput.text?.toString(),
+                    d.noteInput.text?.toString(),
+                )
+                when (parsed) {
                     is UpiPayment.Parsed.Ok -> {
                         dialog.dismiss()
-                        flow.start(parsed.payment)
+                        startPayment(parsed.payment)
                     }
                     is UpiPayment.Parsed.Failed -> when (parsed.error) {
                         is UpiPayment.ParseError.InvalidAmount -> d.amountLayout.error = parsed.error.message
@@ -168,33 +261,64 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    private fun chooseDefault() {
-        val apps = UpiApps.discover(this, prefs.defaultPackage, prefs.showOtherApps).filter { it.installed || it.preferred }
-        val labels = apps.map { if (it.installed) it.label else "${it.label} (not installed)" }.toTypedArray()
+    // ---- Settings ----
+
+    private fun refreshDefaultApp() {
+        b.defaultAppText.text = UpiApps.labelFor(prefs.defaultPackage)
+        val icon = UpiApps.iconFor(this, prefs.defaultPackage)
+        if (icon != null) b.defaultAppIcon.setImageDrawable(icon) else b.defaultAppIcon.setImageResource(R.mipmap.ic_launcher)
+    }
+
+    private fun showSettings() {
+        val dialog = BottomSheetDialog(this)
+        val s = SheetSettingsBinding.inflate(layoutInflater)
+        s.defaultValue.text = UpiApps.labelFor(prefs.defaultPackage)
+        s.defaultRow.setOnClickListener {
+            chooseDefault { s.defaultValue.text = UpiApps.labelFor(prefs.defaultPackage) }
+        }
+        s.alwaysAskSwitch.isChecked = prefs.alwaysAsk
+        s.alwaysAskSwitch.setOnCheckedChangeListener { _, v -> prefs.alwaysAsk = v }
+        s.showOthersSwitch.isChecked = prefs.showOtherApps
+        s.showOthersSwitch.setOnCheckedChangeListener { _, v -> prefs.showOtherApps = v }
+        @Suppress("DEPRECATION")
+        val version = packageManager.getPackageInfo(packageName, 0).versionName
+        s.versionText.text = "${getString(R.string.app_name)} $version · $packageName"
+        dialog.setContentView(s.root)
+        dialog.show()
+    }
+
+    private fun chooseDefault(onChanged: () -> Unit = {}) {
+        val apps = UpiApps.discover(this, prefs.defaultPackage, prefs.showOtherApps)
+        val labels = apps.map { if (it.installed) it.label else "${it.label} · ${getString(R.string.not_installed)}" }
+            .toTypedArray()
         val current = apps.indexOfFirst { it.packageName == prefs.defaultPackage }
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.default_app)
             .setSingleChoiceItems(labels, current) { dialog, which ->
                 prefs.defaultPackage = apps[which].packageName
                 dialog.dismiss()
-                refresh()
+                refreshDefaultApp()
+                onChanged()
             }
             .show()
     }
 
     private fun showResult(r: UpiResponse) {
-        val text = when (r.status) {
-            UpiResponse.Status.SUCCESS -> "Payment successful"
-            UpiResponse.Status.SUBMITTED -> "Payment submitted (pending)"
-            UpiResponse.Status.FAILURE -> "Payment failed"
-            UpiResponse.Status.UNKNOWN -> "Returned from UPI app (status not reported; check the app)"
+        val (text, icon, color) = when (r.status) {
+            UpiResponse.Status.SUCCESS -> Triple(R.string.result_success, R.drawable.ic_check_circle, R.color.success)
+            UpiResponse.Status.SUBMITTED -> Triple(R.string.result_submitted, R.drawable.ic_info, R.color.warning)
+            UpiResponse.Status.FAILURE -> Triple(R.string.result_failure, R.drawable.ic_info, R.color.error)
+            UpiResponse.Status.UNKNOWN -> Triple(R.string.result_unknown, R.drawable.ic_info, R.color.brand_on_surface_variant)
         }
-        b.lastResultText.text = listOfNotNull(
-            "Last payment: $text",
-            r.transactionId?.let { "Txn ID: $it" },
-            r.approvalRef?.let { "Ref: $it" },
-            r.responseCode?.let { "Code: $it" },
-        ).joinToString("\n")
-        b.lastResultText.visibility = View.VISIBLE
+        b.resultText.text = listOfNotNull(
+            getString(text),
+            r.transactionId?.let { "Txn $it" },
+            r.approvalRef?.let { "Ref $it" },
+        ).joinToString(" · ")
+        b.resultIcon.setImageResource(icon)
+        b.resultIcon.setColorFilter(ContextCompat.getColor(this, color))
+        b.resultRow.visibility = View.VISIBLE
     }
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }

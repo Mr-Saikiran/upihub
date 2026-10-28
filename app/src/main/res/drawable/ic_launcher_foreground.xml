@@ -1,0 +1,14 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Finder patterns: outer rings -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M33,33h16v16h-16zM59,33h16v16h-16zM33,59h16v16h-16z" />
+    <path android:fillColor="#4A2DC4"
+        android:pathData="M36,36h10v10h-10zM62,36h10v10h-10zM36,62h10v10h-10z" />
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M39,39h4v4h-4zM65,39h4v4h-4zM39,65h4v4h-4z" />
+    <!-- Switch arrows in the data corner -->
+    <path android:fillColor="#7DF2DC"
+        android:pathData="M59,61h10v-3l6,5 -6,5v-3h-10zM75,73h-10v3l-6,-5 6,-5v3h10z" />
+</vector>
