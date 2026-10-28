@@ -98,9 +98,10 @@ signed APK). Enrol in **Play App Signing** when creating the app: this key is
 then only the *upload* key and can be reset through Play support if lost.
 
 CI (`.github/workflows/android.yml`) tests and builds a debug APK on every
-push. Pushing a `v*` tag that matches `versionName` (e.g. `v0.4.0`) builds the
-signed APK and AAB and publishes a **GitHub Release** with the APK attached,
-using `docs/release-notes/<tag>.md` as its text. It needs these repository
+push. **Actions → Android → Run workflow** on `master` (or pushing a `v*` tag
+that matches `versionName`) builds the signed APK and AAB and publishes a
+**GitHub Release** `v<versionName>` with the APK attached, using
+`docs/release-notes/<tag>.md` as its text. It needs these repository
 secrets: `UPIHUB_KEYSTORE_BASE64` (`base64 -w0 upihub-upload.jks`),
 `UPIHUB_KEYSTORE_PASSWORD`, `UPIHUB_KEY_ALIAS`, `UPIHUB_KEY_PASSWORD`.
 

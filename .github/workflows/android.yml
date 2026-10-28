@@ -5,6 +5,8 @@ on:
     branches: [master]
     tags: ["v*"]
   pull_request:
+  # "Run workflow" on master publishes a release for the current versionName.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -34,9 +36,12 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
 
   release:
-    # Version tags (v0.4.0, ...) build the signed APK and AAB and publish a
-    # GitHub Release with the APK attached. Needs the UPIHUB_* signing secrets.
-    if: startsWith(github.ref, 'refs/tags/v')
+    # A version tag (v0.4.0, ...) or "Run workflow" on master builds the signed
+    # APK and AAB and publishes a GitHub Release with the APK attached. Needs
+    # the UPIHUB_* signing secrets.
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -48,10 +53,18 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
-      - name: Check the tag matches versionName
+      - name: Work out the release tag
         run: |
           version=$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' app/build.gradle.kts)
-          test "v$version" = "$GITHUB_REF_NAME" || { echo "::error::Tag $GITHUB_REF_NAME does not match versionName $version"; exit 1; }
+          test -n "$version" || { echo "::error::versionName not found"; exit 1; }
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            tag="v$version"
+          else
+            tag="$GITHUB_REF_NAME"
+            test "v$version" = "$tag" || { echo "::error::Tag $tag does not match versionName $version"; exit 1; }
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "TAG=$tag" >> "$GITHUB_ENV"
       - name: Restore upload keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.UPIHUB_KEYSTORE_BASE64 }}
@@ -67,16 +80,18 @@ jobs:
         run: ./gradlew bundleRelease assembleRelease
       - name: Collect release files
         run: |
-          version="${GITHUB_REF_NAME#v}"
           mkdir dist
-          cp app/build/outputs/apk/release/app-release.apk "dist/techswitch-upihub-$version.apk"
-          cp app/build/outputs/bundle/release/app-release.aab "dist/techswitch-upihub-$version-playstore.aab"
+          cp app/build/outputs/apk/release/app-release.apk "dist/techswitch-upihub-$VERSION.apk"
+          cp app/build/outputs/bundle/release/app-release.aab "dist/techswitch-upihub-$VERSION-playstore.aab"
           (cd dist && sha256sum * > SHA256SUMS)
-          notes="docs/release-notes/$GITHUB_REF_NAME.md"
-          if [ -f "$notes" ]; then cp "$notes" dist-notes.md; else echo "UPI Hub $GITHUB_REF_NAME" > dist-notes.md; fi
+          notes="docs/release-notes/$TAG.md"
+          if [ -f "$notes" ]; then cp "$notes" dist-notes.md; else echo "UPI Hub $TAG" > dist-notes.md; fi
       - uses: softprops/action-gh-release@v2
         with:
-          name: UPI Hub ${{ github.ref_name }}
+          # Creates the tag at this commit when it does not exist yet.
+          tag_name: ${{ env.TAG }}
+          target_commitish: ${{ github.sha }}
+          name: UPI Hub ${{ env.TAG }}
           body_path: dist-notes.md
           files: |
             dist/techswitch-upihub-*.apk
