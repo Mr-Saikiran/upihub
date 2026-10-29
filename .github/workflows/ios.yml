@@ -1,0 +1,95 @@
+name: iOS
+
+on:
+  push:
+    branches: [master]
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+  pull_request:
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+  # "Run workflow" with publish ticked attaches the unsigned IPA to the
+  # GitHub release v<MARKETING_VERSION>.
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Attach the unsigned IPA to the GitHub release for this version
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    defaults:
+      run:
+        shell: bash
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate the Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Unit tests on an iPhone simulator
+        run: |
+          udid=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          print(next(d["udid"] for runtime, ds in sorted(devices.items(), reverse=True) if "iOS" in runtime
+                     for d in ds if d["name"].startswith("iPhone")))')
+          echo "Simulator $udid"
+          xcodebuild -quiet test -project UPIHub.xcodeproj -scheme UPIHub -destination "id=$udid" CODE_SIGNING_ALLOWED=NO
+      - name: Build the unsigned IPA
+        run: |
+          xcodebuild -quiet build -project UPIHub.xcodeproj -scheme UPIHub -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+          version=$(sed -n 's/^ *MARKETING_VERSION: "\(.*\)"/\1/p' project.yml)
+          test -n "$version"
+          app=build/Build/Products/Release-iphoneos/UPIHub.app
+          plutil -p "$app/Info.plist" | grep -E '"CFBundle(Identifier|ShortVersionString|Version|DisplayName)"'
+          lipo -info "$app/UPIHub"
+          mkdir -p dist/Payload
+          cp -R "$app" dist/Payload/
+          (cd dist && zip -qry "techswitch-upihub-$version-ios-unsigned.ipa" Payload && rm -rf Payload \
+            && shasum -a 256 ./*.ipa > SHA256SUMS-ios && cat SHA256SUMS-ios)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: upi-hub-ios-unsigned-ipa
+          path: ios/dist/
+
+  publish:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/master'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: upi-hub-ios-unsigned-ipa
+          path: dist
+      - name: Work out the release tag
+        run: |
+          version=$(sed -n 's/^ *MARKETING_VERSION: "\(.*\)"/\1/p' ios/project.yml)
+          test -n "$version"
+          echo "TAG=v$version" >> "$GITHUB_ENV"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          append_body: true
+          body: |
+
+            ### iPhone (unsigned preview)
+            `techswitch-upihub-*-ios-unsigned.ipa` is built by the iOS workflow without an Apple signature,
+            because the project has no Apple Developer account yet. iPhones only run signed apps, so install it
+            with a sideloading tool such as AltStore or Sideloadly, which signs it with your own Apple ID
+            (apps signed with a free Apple ID stop opening after 7 days until re-signed). iOS 16 or newer.
+            The iPhone app scans UPI QR codes and opens Google Pay, PhonePe and Paytm with documented links;
+            Kiwi, CRED, MobiKwik, Jupiter, BHIM and Amazon Pay use the common `scheme://upi/pay` form, and
+            "Any UPI app" hands the plain `upi://` link to iOS. `SHA256SUMS-ios` lists the IPA checksum.
+          files: |
+            dist/*.ipa
+            dist/SHA256SUMS-ios

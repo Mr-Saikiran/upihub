@@ -1,0 +1,69 @@
+# XcodeGen spec: `xcodegen generate` (in ios/) writes UPIHub.xcodeproj and
+# UPIHub/Info.plist. Both are generated, so they are not committed.
+name: UPIHub
+options:
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    MARKETING_VERSION: "0.4.0"
+    CURRENT_PROJECT_VERSION: "4"
+    SWIFT_VERSION: "5.0"
+    DEVELOPMENT_TEAM: ""
+targets:
+  UPIHub:
+    type: application
+    platform: iOS
+    sources:
+      - path: UPIHub
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: techswitch.upihub
+        PRODUCT_NAME: UPIHub
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO
+    info:
+      path: UPIHub/Info.plist
+      properties:
+        CFBundleDisplayName: UPI Hub
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSCameraUsageDescription: UPI Hub uses the camera to read UPI QR codes. Frames are never saved or sent anywhere.
+        # Every scheme in UpiApps.catalogue; canOpenURL returns false for undeclared ones.
+        LSApplicationQueriesSchemes:
+          - upi
+          - kiwi
+          - paytmmp
+          - credpay
+          - mobikwik
+          - jupiter
+          - tez
+          - phonepe
+          - bhim
+          - amazonpay
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        ITSAppUsesNonExemptEncryption: false
+  UPIHubTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: UPIHubTests
+    dependencies:
+      - target: UPIHub
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: techswitch.upihub.tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  UPIHub:
+    build:
+      targets:
+        UPIHub: all
+        UPIHubTests: [test]
+    test:
+      targets:
+        - UPIHubTests

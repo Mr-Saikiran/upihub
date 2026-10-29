@@ -105,6 +105,33 @@ that matches `versionName`) builds the signed APK and AAB and publishes a
 secrets: `UPIHUB_KEYSTORE_BASE64` (`base64 -w0 upihub-upload.jks`),
 `UPIHUB_KEYSTORE_PASSWORD`, `UPIHUB_KEY_ALIAS`, `UPIHUB_KEY_PASSWORD`.
 
+## iPhone (iOS 16+)
+
+`ios/` holds a SwiftUI version: the same scanner-first home, screenshot and
+typed-UPI-ID payments, amount entry for codes without one, a default app
+picked on first launch, and the Payment apps screen (reorder, hide, sort).
+The payment parser is a port of `UpiPayment.kt` and its tests mirror the
+Android ones.
+
+iOS has no "every app that handles `upi://pay`" query, so apps are reached
+through their own URL schemes (`ios/UPIHub/UpiApps.swift`). Google Pay
+(`tez://upi/pay`), PhonePe (`phonepe://pay`) and Paytm (`paytmmp://upi/pay`)
+use link formats documented in Razorpay's iOS UPI guide; Kiwi, CRED, MobiKwik,
+Jupiter, BHIM and Amazon Pay schemes are documented for detection and use the
+common `scheme://upi/pay` form (unverified); INDmoney and super.money publish
+no iOS scheme and are reached through "Any UPI app" (plain `upi://`, iOS
+chooses the app). iOS apps return no payment result, and the home-screen
+widget is Android-only for now.
+
+CI (`.github/workflows/ios.yml`, macOS runner) generates the Xcode project
+with XcodeGen, runs the unit tests on a simulator and builds an **unsigned**
+IPA. **Actions → iOS → Run workflow** with *publish* ticked attaches it to
+the release `v<MARKETING_VERSION>`. An unsigned IPA installs only through a
+sideloading tool (AltStore, Sideloadly) that signs it with your Apple ID;
+TestFlight or the App Store need an Apple Developer account and signing
+secrets. Build locally on a Mac: `brew install xcodegen && cd ios && xcodegen
+generate && open UPIHub.xcodeproj`.
+
 ## Publishing
 
 See [docs/PUBLISHING.md](docs/PUBLISHING.md) for the Google Play walkthrough,
