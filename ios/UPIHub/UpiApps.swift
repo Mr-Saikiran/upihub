@@ -63,9 +63,10 @@ enum UpiApps {
     }
 
     /// A URL for link text that may contain characters a scanned QR leaves
-    /// unencoded (spaces, non-ASCII). Existing `%` escapes are kept.
+    /// unencoded (spaces, non-ASCII). Existing `%` escapes are kept. Encoded
+    /// here rather than left to URL(string:), whose leniency differs between
+    /// iOS versions (iOS 17 started encoding invalid characters itself).
     static func url(_ text: String) -> URL? {
-        if let url = URL(string: text) { return url }
         var allowed = CharacterSet.urlQueryAllowed
         allowed.insert("%")
         return text.addingPercentEncoding(withAllowedCharacters: allowed).flatMap { URL(string: $0) }

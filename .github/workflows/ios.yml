@@ -39,7 +39,17 @@ jobs:
           print(next(d["udid"] for runtime, ds in sorted(devices.items(), reverse=True) if "iOS" in runtime
                      for d in ds if d["name"].startswith("iPhone")))')
           echo "Simulator $udid"
-          xcodebuild -quiet test -project UPIHub.xcodeproj -scheme UPIHub -destination "id=$udid" CODE_SIGNING_ALLOWED=NO
+          set +e
+          xcodebuild test -project UPIHub.xcodeproj -scheme UPIHub -destination "id=$udid" CODE_SIGNING_ALLOWED=NO > test.log 2>&1
+          status=$?
+          # Test results and failure messages only; the full log is in the artifact on failure.
+          grep -E "error:|Test Case .*(passed|failed)|Executed [0-9]+ test|\*\* TEST" test.log | tail -n 80
+          exit $status
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ios-test-log
+          path: ios/test.log
       - name: Build the unsigned IPA
         run: |
           xcodebuild -quiet build -project UPIHub.xcodeproj -scheme UPIHub -configuration Release \
