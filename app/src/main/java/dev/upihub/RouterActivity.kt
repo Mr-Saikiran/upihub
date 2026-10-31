@@ -37,6 +37,8 @@ class RouterActivity : AppCompatActivity() {
             Prefs(this),
             launch = { forwarded = true; payLauncher.launch(it) },
             onCancel = { setResult(Activity.RESULT_CANCELED); finish() },
+            // The calling app waits for a payment result, which only a link returns.
+            canShareQr = false,
         ).start(parsed.payment)
     }
 

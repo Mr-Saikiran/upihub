@@ -1,6 +1,7 @@
 package dev.upihub
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -66,6 +67,14 @@ class UpiPaymentTest {
         assertTrue(p.withAmount("0") is UpiPayment.Parsed.Failed)
         assertTrue(p.withAmount("") is UpiPayment.Parsed.Failed)
         assertTrue(p.withAmount("12.345") is UpiPayment.Parsed.Failed)
+    }
+
+    @Test fun signedQrIsDetectedAndNeverModified() {
+        val signed = ok("upi://pay?pa=shop@hdfcbank&pn=Shop&mc=5411&mode=02&orgid=000000&sign=MEUCIQ%2Babc%3D")
+        assertTrue(signed.signed)
+        assertEquals(UpiPayment.ParseError.SignedQr, (signed.withAmount("10") as UpiPayment.Parsed.Failed).error)
+        assertFalse(ok("upi://pay?pa=a@ybl&sign=").signed)
+        assertFalse(ok("upi://pay?pa=a@ybl").signed)
     }
 
     @Test fun buildsManualPaymentWithEncoding() {

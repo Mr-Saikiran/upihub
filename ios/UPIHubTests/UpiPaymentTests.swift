@@ -72,6 +72,20 @@ final class UpiPaymentTests: XCTestCase {
         }
     }
 
+    func testSignedQrIsDetectedAndNeverModified() throws {
+        let p = try ok("upi://pay?pa=shop@hdfcbank&pn=Shop&mc=5411&mode=02&orgid=000000&sign=MEUCIQ%2Babc%3D")
+        XCTAssertTrue(p.signed)
+        if case .success = p.withAmount("10") { XCTFail("a signed QR must not be modified") }
+        XCTAssertFalse(try ok("upi://pay?pa=a@ybl&sign=").signed)
+        XCTAssertFalse(try ok("upi://pay?pa=a@ybl").signed)
+    }
+
+    func testSharedQrImageDecodesToExactlyTheScannedText() throws {
+        let raw = "upi://pay?pa=vyapar.1787@hdfcbank&pn=Ram%20Reddy&mc=5411&mode=02&orgid=180001&sign=MEUCIQ%2BabcD%3D"
+        let image = try XCTUnwrap(QRImageEncoder.image(for: raw))
+        XCTAssertEqual(QRImageDecoder.decode(image), raw)
+    }
+
     func testBuildsManualPaymentWithEncoding() throws {
         let p = try XCTUnwrap(try? UpiPayment.build(payeeAddress: "friend@okhdfcbank", payeeName: "Ravi K",
                                                      amount: "100", note: "Dinner & movie").get())

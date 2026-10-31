@@ -25,7 +25,8 @@ struct ChooserSheet: View {
         _remember = State(initialValue: defaultScheme == nil)
     }
 
-    private var needsAmount: Bool { payment.amount == nil }
+    /// A signed QR is never modified, so its amount is entered in the payment app.
+    private var needsAmount: Bool { payment.amount == nil && !payment.signed }
     private var selectedApp: UpiAppInfo? { apps.first { $0.scheme == selected } }
 
     /// The payment to send, or nil while a required amount is missing or invalid.
@@ -47,6 +48,13 @@ struct ChooserSheet: View {
                 VStack(alignment: .leading, spacing: 16) {
                     header
                     if needsAmount { amountField }
+                    if payment.signed && payment.amount == nil {
+                        Text("This merchant QR is signed, so UPI Hub can't add an amount without breaking it. Enter the amount in the payment app.")
+                            .font(.subheadline)
+                            .padding(12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Brand.secondary.opacity(0.15), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
                     Text("Pay using").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
                     VStack(spacing: 6) {
                         ForEach(apps) { app in row(app) }
@@ -67,6 +75,13 @@ struct ChooserSheet: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(toSend == nil || selectedApp == nil)
+                // "QR Share and Pay": the merchant's QR, unchanged, for any app that reads shared images.
+                if let qr = QRImageEncoder.image(for: payment.raw) {
+                    ShareLink(item: Image(uiImage: qr), preview: SharePreview("UPI QR", image: Image(uiImage: qr))) {
+                        Label("Share QR image to an app", systemImage: "square.and.arrow.up")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                }
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)

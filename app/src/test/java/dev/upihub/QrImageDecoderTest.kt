@@ -26,6 +26,16 @@ class QrImageDecoderTest {
         assertEquals("upi://pay?pa=a@ybl", QrImageDecoder.decodePixels(px, w, h))
     }
 
+    @Test fun sharedQrImageDecodesToExactlyTheScannedText() {
+        // A signed merchant QR and a payee name outside ASCII must both survive the round trip.
+        for (raw in listOf(
+            "upi://pay?pa=vyapar.1787@hdfcbank&pn=Ram%20Reddy&mc=5411&mode=02&orgid=180001&sign=MEUCIQ%2BabcD%3D",
+            "upi://pay?pa=ravi@okaxis&pn=रवि&cu=INR",
+        )) {
+            assertEquals(raw, QrImageDecoder.decodePixels(QrImage.pixels(raw, 600), 600, 600))
+        }
+    }
+
     @Test fun blankImageHasNoCode() {
         assertNull(QrImageDecoder.decodePixels(IntArray(100 * 100) { -1 }, 100, 100))
     }

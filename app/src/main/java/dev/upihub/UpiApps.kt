@@ -21,8 +21,15 @@ data class UpiApp(
     val visible: Boolean,
     val icon: Drawable?,
     val component: ComponentName?,
+    /**
+     * The activity that takes a shared image (ACTION_SEND with an image type), used for
+     * NPCI's "QR Share and Pay": the app decodes the merchant's QR itself.
+     * Google Pay and PhonePe declare one; null when the app has none.
+     */
+    val shareTarget: ComponentName? = null,
 ) {
     val acceptsLinks: Boolean get() = component != null
+    val acceptsQrImages: Boolean get() = shareTarget != null
 }
 
 object UpiApps {
@@ -66,10 +73,15 @@ object UpiApps {
 
         val preferred = PREFERRED
             .filter { it.packageName in handlers || isInstalled(pm, it.packageName) }
-            .map { p -> UpiApp(p.packageName, p.label, true, false, loadIcon(pm, p.packageName), handlers[p.packageName]) }
+            .map { p ->
+                UpiApp(p.packageName, p.label, true, false, loadIcon(pm, p.packageName), handlers[p.packageName],
+                    shareTarget(pm, p.packageName))
+            }
         val others = handlers
             .filterKeys { pkg -> PREFERRED.none { it.packageName == pkg } }
-            .map { (pkg, component) -> UpiApp(pkg, loadLabel(pm, pkg), false, false, loadIcon(pm, pkg), component) }
+            .map { (pkg, component) ->
+                UpiApp(pkg, loadLabel(pm, pkg), false, false, loadIcon(pm, pkg), component, shareTarget(pm, pkg))
+            }
             .sortedBy { it.label.lowercase() }
         val default = prefs.defaultPackage
         val baseline = (preferred + others)
@@ -93,6 +105,20 @@ object UpiApps {
         } else {
             @Suppress("DEPRECATION")
             pm.queryIntentActivities(probe, 0)
+        }
+    }
+
+    /** The app's exported activity that accepts a shared PNG, if any. */
+    private fun shareTarget(pm: PackageManager, pkg: String): ComponentName? {
+        val probe = Intent(Intent.ACTION_SEND).setType("image/png").setPackage(pkg)
+        val matches = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            pm.queryIntentActivities(probe, PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong()))
+        } else {
+            @Suppress("DEPRECATION")
+            pm.queryIntentActivities(probe, PackageManager.MATCH_DEFAULT_ONLY)
+        }
+        return matches.firstNotNullOfOrNull { info ->
+            info.activityInfo?.takeIf { it.exported }?.let { ComponentName(it.packageName, it.name) }
         }
     }
 

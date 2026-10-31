@@ -71,6 +71,17 @@
             android:label="@string/manage_apps"
             android:parentActivityName=".MainActivity" />
 
+        <!-- Hands the QR image to the chosen payment app ("QR Share and Pay"). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.qr"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/qr_paths" />
+        </provider>
+
         <receiver
             android:name=".ScanWidgetProvider"
             android:exported="false"

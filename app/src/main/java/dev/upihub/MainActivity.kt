@@ -79,7 +79,17 @@ class MainActivity : AppCompatActivity() {
         b = ActivityMainBinding.inflate(layoutInflater)
         setContentView(b.root)
         prefs = Prefs(this)
-        flow = PaymentFlow(this, prefs, launch = { payLauncher.launch(it) }, onCancel = { finishHandling(holdMillis = 2_500) })
+        flow = PaymentFlow(
+            this,
+            prefs,
+            launch = { payLauncher.launch(it) },
+            onCancel = { finishHandling(holdMillis = 2_500) },
+            onShared = { app ->
+                showShared(app)
+                finishHandling(holdMillis = 5_000)
+            },
+        )
+        b.retryButton.setOnClickListener { retryAnotherWay() }
 
         ViewCompat.setOnApplyWindowInsetsListener(b.root) { _, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -288,6 +298,8 @@ class MainActivity : AppCompatActivity() {
         s.defaultRow.setOnClickListener { chooseDefault { showDefault() } }
         s.alwaysAskSwitch.isChecked = prefs.alwaysAsk
         s.alwaysAskSwitch.setOnCheckedChangeListener { _, v -> prefs.alwaysAsk = v }
+        s.shareQrSwitch.isChecked = prefs.shareQrImage
+        s.shareQrSwitch.setOnCheckedChangeListener { _, v -> prefs.shareQrImage = v }
         val apps = UpiApps.discover(this, prefs)
         s.appsValue.text = getString(R.string.apps_shown_count, apps.count { it.visible }, apps.size)
         s.appsRow.setOnClickListener {
@@ -346,14 +358,48 @@ class MainActivity : AppCompatActivity() {
             UpiResponse.Status.FAILURE -> Triple(R.string.result_failure, R.drawable.ic_info, R.color.error)
             UpiResponse.Status.UNKNOWN -> Triple(R.string.result_unknown, R.drawable.ic_info, R.color.brand_on_surface_variant)
         }
-        b.resultText.text = listOfNotNull(
-            getString(text),
-            r.transactionId?.let { "Txn $it" },
-            r.approvalRef?.let { "Ref $it" },
-        ).joinToString(" · ")
+        showResultRow(
+            listOfNotNull(getString(text), r.transactionId?.let { "Txn $it" }, r.approvalRef?.let { "Ref $it" })
+                .joinToString(" · "),
+            icon,
+            color,
+        )
+        // A declined or unconfirmed link payment can be retried the way scanning in the app works.
+        val attempt = flow.lastLinkAttempt
+        val retryable = attempt != null &&
+            (r.status == UpiResponse.Status.FAILURE || r.status == UpiResponse.Status.UNKNOWN)
+        b.retryButton.visibility = if (retryable) View.VISIBLE else View.GONE
+        if (attempt == null || !retryable) return
+        val app = attempt.second
+        val retryLabel = getString(if (app.acceptsQrImages) R.string.retry_share_qr else R.string.retry_save_qr, app.label)
+        b.retryButton.text = retryLabel
+        if (r.status == UpiResponse.Status.FAILURE) {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(getString(R.string.declined_title, app.label))
+                .setMessage(R.string.declined_body)
+                .setPositiveButton(retryLabel) { _, _ -> retryAnotherWay() }
+                .setNegativeButton(R.string.cancel, null)
+                .show()
+        }
+    }
+
+    private fun showShared(app: UpiApp) {
+        showResultRow(getString(R.string.shared_qr, app.label), R.drawable.ic_check_circle, R.color.brand_on_surface_variant)
+        b.retryButton.visibility = View.GONE
+    }
+
+    private fun showResultRow(text: String, icon: Int, color: Int) {
+        b.resultText.text = text
         b.resultIcon.setImageResource(icon)
         b.resultIcon.setColorFilter(ContextCompat.getColor(this, color))
         b.resultRow.visibility = View.VISIBLE
+    }
+
+    /** Sends the last declined payment as the QR image, or saves it and opens the app to scan from the gallery. */
+    private fun retryAnotherWay() {
+        val app = flow.lastLinkAttempt?.second ?: return
+        b.retryButton.visibility = View.GONE
+        if (app.acceptsQrImages) flow.retryAsQrImage() else flow.saveQrAndOpenApp()
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()

@@ -12,6 +12,10 @@ struct UpiPayment: Equatable {
     let payeeName: String?
     let amount: String?
     let note: String?
+    /// The QR carries a `sign` parameter. NPCI's linking spec requires the
+    /// paying app to decline a signed QR whose text was changed, so a signed
+    /// QR is never modified.
+    var signed: Bool = false
 
     enum ParseError: Error, Equatable {
         case notUpi
@@ -19,6 +23,7 @@ struct UpiPayment: Equatable {
         case missingPayee
         case invalidPayee(String)
         case invalidAmount(String)
+        case signedQr
 
         var message: String {
             switch self {
@@ -27,6 +32,7 @@ struct UpiPayment: Equatable {
             case .missingPayee: return "The UPI code has no payee address (pa)."
             case .invalidPayee(let value): return "\"\(value)\" is not a valid UPI ID."
             case .invalidAmount(let value): return "\"\(value)\" is not a valid amount."
+            case .signedQr: return "This merchant QR is signed, so its amount can only be entered in the payment app."
             }
         }
     }
@@ -42,6 +48,7 @@ struct UpiPayment: Equatable {
     /// apps, so it has to be in the link. Every other parameter is kept byte
     /// for byte; a zero `am` is replaced.
     func withAmount(_ value: String) -> Result<UpiPayment, ParseError> {
+        if signed { return .failure(.signedQr) }
         let am = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard Self.isValidAmount(am), let formatted = Self.formatAmount(am) else {
             return .failure(.invalidAmount(am))
@@ -85,7 +92,8 @@ struct UpiPayment: Equatable {
             payeeAddress: pa,
             payeeName: params["pn"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
             amount: displayAmount,
-            note: params["tn"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty))
+            note: params["tn"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            signed: !(params["sign"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)))
     }
 
     /// Builds a payment request for a UPI ID typed by the user.

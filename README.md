@@ -53,6 +53,31 @@ Known apps (any other installed UPI app is detected too):
   app's result back to the caller.
 - Light and dark themes; adaptive launcher icon.
 
+## How a payment reaches the app
+
+NPCI treats these as separate UPI channels, and payment apps apply their own
+risk rules per channel. Small (P2PM) merchants and RuPay credit cards are
+where payments handed over by another app are most often declined, even when
+scanning the same QR in the app works (NPCI caps both "Share Intent link and
+Pay" and "QR Share and Pay" at ₹2,000 for non-verified/P2PM merchants).
+
+- **QR image ("QR Share and Pay")**, used when the chosen app takes a shared
+  image and *Settings → Send the QR image* is on (default). UPI Hub draws the
+  scanned QR text, unchanged, as an image and shares it with that app's share
+  target; the app decodes and checks the merchant's QR itself and asks for the
+  amount if the QR has none. Google Pay and PhonePe declare such a target
+  (`ShareIntentFilter` / `ActionSendIntentHandler`, `SEND image/*`); others are
+  detected at runtime the same way.
+- **Payment link (`upi://pay` intent)** for every other app, and always for
+  `upi://` links relayed from another app (their caller waits for a result,
+  which only a link returns). If the app reports a failure, UPI Hub offers to
+  send the QR image instead, or to save it to Photos and open the app so its
+  "scan from gallery" can read it.
+
+Signed merchant QRs (`sign=`) are never modified: NPCI's linking spec requires
+the paying app to decline a changed one as tampered, so for those the amount is
+entered in the payment app.
+
 ## How it works
 
 UPI Hub never touches money, PINs or bank credentials and has no server. It

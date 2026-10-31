@@ -30,6 +30,15 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_ALWAYS_ASK, true)
         set(value) = sp.edit().putBoolean(KEY_ALWAYS_ASK, value).apply()
 
+    /**
+     * Share the QR image with apps that take one ("QR Share and Pay") instead
+     * of handing over a payment link. On by default: payment apps decode the
+     * merchant's QR themselves, as when scanning in the app.
+     */
+    var shareQrImage: Boolean
+        get() = sp.getBoolean(KEY_SHARE_QR, true)
+        set(value) = sp.edit().putBoolean(KEY_SHARE_QR, value).apply()
+
     /** Package names in the order the user arranged the payment list. */
     var appOrder: List<String>
         get() = sp.getString(KEY_APP_ORDER, null)?.split(',')?.filter { it.isNotEmpty() } ?: emptyList()
@@ -61,6 +70,7 @@ class Prefs(context: Context) {
         const val KEY_ALWAYS_ASK = "always_ask"
         const val KEY_APP_ORDER = "app_order"
         const val KEY_HIDDEN = "hidden_apps"
+        const val KEY_SHARE_QR = "share_qr_image"
         const val KEY_SCHEMA = "prefs_schema"
         const val KEY_CAMERA_BLOCKED = "camera_blocked"
     }

@@ -49,6 +49,16 @@ class AppWorkflowTest {
     private val app: Application = ApplicationProvider.getApplicationContext()
     private val merchantQr = "upi://pay?pa=chaipoint.blr@okaxis&pn=Chai%20Point&mc=5812&tr=TR42&am=149.00&cu=INR&sign=AbC%2B%3D"
 
+    /**
+     * FileProvider caches its roots per authority in a static map. Robolectric
+     * reuses the class across tests but gives each test a new data directory,
+     * so a stale cache would point at an earlier test's folder.
+     */
+    @Before fun resetFileProviderCache() {
+        val cache = androidx.core.content.FileProvider::class.java.getDeclaredField("sCache").apply { isAccessible = true }
+        (cache.get(null) as MutableMap<*, *>).clear()
+    }
+
     @Before fun installFakeUpiApps() {
         // Most tests start after the user picked Kiwi; first-launch tests clear it.
         Prefs(app).defaultPackage = "in.gokiwi.kiwitpap"
@@ -325,6 +335,114 @@ class AppWorkflowTest {
         assertEquals(listOf("Kiwi", "Paytm", "CRED", "Google Pay", "PhonePe"), openChooserLabels())
     }
 
+    @Test fun appThatTakesImagesGetsTheUnchangedQrAsAnImage() {
+        addShareTarget("com.phonepe.app")
+        Prefs(app).defaultPackage = "com.phonepe.app"
+        val staticQr = "upi://pay?pa=vyapar.1787@hdfcbank&pn=Ram%20Reddy&mc=5411&mode=01&orgid=180001&sign=MEUCIQ%2BabcD%3D"
+        shadowOf(app).grantPermissions(Manifest.permission.CAMERA)
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        fakeCameraFrame(activity.findViewById(R.id.barcodeView))
+        activity.startPayment((UpiPayment.parse(staticQr) as UpiPayment.Parsed.Ok).payment)
+        idle()
+
+        val sheet = ShadowDialog.getLatestDialog() as BottomSheetDialog
+        val pay = sheet.findViewById<Button>(R.id.payButton)!!
+        // No amount step: PhonePe reads the QR and asks for the amount itself.
+        assertEquals(View.GONE, sheet.findViewById<View>(R.id.amountLayout)!!.visibility)
+        assertEquals(View.VISIBLE, sheet.findViewById<View>(R.id.deliveryNote)!!.visibility)
+        assertTrue(pay.isEnabled)
+        assertEquals("Send QR to PhonePe", pay.text.toString())
+        capture(activity.window.decorView, "10-chooser-send-qr", dialog = sheet.window!!.decorView)
+
+        pay.performClick()
+        idle()
+        val sent = shadowOf(activity).nextStartedActivity
+        assertEquals(Intent.ACTION_SEND, sent.action)
+        assertEquals(ComponentName("com.phonepe.app", "com.phonepe.app.ShareActivity"), sent.component)
+        assertEquals("image/png", sent.type)
+        assertTrue(sent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+        @Suppress("DEPRECATION")
+        val uri = sent.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM)!!
+        assertEquals("techswitch.upihub.qr", uri.authority)
+        assertEquals(staticQr, decodeSharedImage(uri))
+        assertTrue(activity.findViewById<android.widget.TextView>(R.id.resultText).text.contains("Sent the QR to PhonePe"))
+    }
+
+    @Test fun appWithoutImageTargetStillGetsTheLink() {
+        addShareTarget("com.phonepe.app") // PhonePe takes images, Kiwi (the default) does not.
+        Prefs(app).alwaysAsk = false
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        activity.startPayment((UpiPayment.parse(merchantQr) as UpiPayment.Parsed.Ok).payment)
+        idle()
+        val sent = shadowOf(activity).nextStartedActivityForResult.intent
+        assertEquals(Intent.ACTION_VIEW, sent.action)
+        assertEquals("in.gokiwi.kiwitpap", sent.`package`)
+        assertEquals(merchantQr, sent.dataString)
+    }
+
+    @Test fun signedQrWithoutAmountIsSentUnchangedAsALink() {
+        val signedQr = "upi://pay?pa=vyapar.1787@hdfcbank&pn=Ram%20Reddy&mc=5411&mode=02&sign=MEUCIQ%2BabcD%3D"
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        activity.startPayment((UpiPayment.parse(signedQr) as UpiPayment.Parsed.Ok).payment)
+        idle()
+        val sheet = ShadowDialog.getLatestDialog() as BottomSheetDialog
+        assertEquals(View.GONE, sheet.findViewById<View>(R.id.amountLayout)!!.visibility)
+        assertTrue(sheet.findViewById<android.widget.TextView>(R.id.deliveryNote)!!.text.contains("signed"))
+        val pay = sheet.findViewById<Button>(R.id.payButton)!!
+        assertTrue(pay.isEnabled)
+        pay.performClick()
+        idle()
+        assertEquals(signedQr, shadowOf(activity).nextStartedActivityForResult.intent.dataString)
+    }
+
+    @Test fun sharingCanBeSwitchedOff() {
+        addShareTarget("com.phonepe.app")
+        Prefs(app).defaultPackage = "com.phonepe.app"
+        Prefs(app).shareQrImage = false
+        Prefs(app).alwaysAsk = false
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        activity.startPayment((UpiPayment.parse(merchantQr) as UpiPayment.Parsed.Ok).payment)
+        idle()
+        assertEquals(Intent.ACTION_VIEW, shadowOf(activity).nextStartedActivityForResult.intent.action)
+    }
+
+    @Test fun linksRelayedFromOtherAppsStayLinksSoTheirResultReturns() {
+        addShareTarget("com.phonepe.app")
+        Prefs(app).defaultPackage = "com.phonepe.app"
+        Prefs(app).alwaysAsk = false
+        val router = Robolectric.buildActivity(RouterActivity::class.java,
+            Intent(Intent.ACTION_VIEW, android.net.Uri.parse(merchantQr))).setup().get()
+        idle()
+        val forwarded = shadowOf(router).nextStartedActivityForResult.intent
+        assertEquals(Intent.ACTION_VIEW, forwarded.action)
+        assertEquals("com.phonepe.app", forwarded.`package`)
+    }
+
+    @Test fun declinedLinkCanBeRetriedAsTheQrImage() {
+        addShareTarget("com.phonepe.app")
+        Prefs(app).defaultPackage = "com.phonepe.app"
+        Prefs(app).shareQrImage = false // First attempt goes as a link, as before this change.
+        Prefs(app).alwaysAsk = false
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        activity.startPayment((UpiPayment.parse(merchantQr) as UpiPayment.Parsed.Ok).payment)
+        idle()
+        val link = shadowOf(activity).nextStartedActivityForResult
+        shadowOf(activity).receiveResult(link.intent, android.app.Activity.RESULT_OK,
+            Intent().putExtra("response", "txnId=X&responseCode=ZM&Status=FAILURE"))
+        idle()
+
+        val declined = ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
+        val retry = declined.getButton(android.content.DialogInterface.BUTTON_POSITIVE)
+        assertEquals("Send the QR to PhonePe instead", retry.text.toString())
+        capture(activity.window.decorView, "11-declined-retry", dialog = declined.window!!.decorView)
+        retry.performClick()
+        idle()
+        val shared = shadowOf(activity).nextStartedActivity
+        assertEquals(Intent.ACTION_SEND, shared.action)
+        @Suppress("DEPRECATION")
+        assertEquals(merchantQr, decodeSharedImage(shared.getParcelableExtra(Intent.EXTRA_STREAM)!!))
+    }
+
     @Test fun homeScreenWidgetOpensScanner() {
         val manager = android.appwidget.AppWidgetManager.getInstance(app)
         val id = shadowOf(manager).createWidget(ScanWidgetProvider::class.java, R.layout.widget_scan)
@@ -434,6 +552,24 @@ class AppWorkflowTest {
         managerRow(manager, label).findViewById<com.google.android.material.materialswitch.MaterialSwitch>(R.id.visibleSwitch)
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
+
+    /** Adds an exported image share target, like Google Pay's and PhonePe's. */
+    private fun addShareTarget(pkg: String) {
+        val spm = shadowOf(app.packageManager)
+        val component = ComponentName(pkg, "$pkg.ShareActivity")
+        spm.addActivityIfNotPresent(component).exported = true
+        spm.addIntentFilterForActivity(component, IntentFilter(Intent.ACTION_SEND).apply {
+            addCategory(Intent.CATEGORY_DEFAULT)
+            addDataType("image/*")
+        })
+    }
+
+    private fun decodeSharedImage(uri: android.net.Uri): String? {
+        val bmp = app.contentResolver.openInputStream(uri)!!.use { android.graphics.BitmapFactory.decodeStream(it) }
+        val px = IntArray(bmp.width * bmp.height)
+        bmp.getPixels(px, 0, bmp.width, 0, 0, bmp.width, bmp.height)
+        return QrImageDecoder.decodePixels(px, bmp.width, bmp.height)
+    }
 
     private fun installUpiApp(pkg: String, label: String, color: Int, defaultCategory: Boolean = true) {
         val spm = shadowOf(app.packageManager)

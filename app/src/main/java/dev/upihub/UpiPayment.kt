@@ -17,6 +17,12 @@ data class UpiPayment(
     val payeeName: String?,
     val amount: String?,
     val note: String?,
+    /**
+     * The QR carries a `sign` parameter. NPCI's linking spec requires the
+     * paying app to decline a signed QR whose text was changed ("intent is
+     * tampered or corrupt"), so a signed QR is never modified.
+     */
+    val signed: Boolean = false,
 ) {
     sealed class ParseError(val message: String) {
         data object NotUpi : ParseError("This QR code is not a UPI payment code.")
@@ -27,6 +33,7 @@ data class UpiPayment(
             ParseError("\"$value\" is not a valid UPI ID.")
         data class InvalidAmount(val value: String) :
             ParseError("\"$value\" is not a valid amount.")
+        data object SignedQr : ParseError("This merchant QR is signed, so its amount can only be entered in the payment app.")
     }
 
     sealed class Parsed {
@@ -41,6 +48,7 @@ data class UpiPayment(
      * parameter is kept byte-for-byte; a zero `am` is replaced.
      */
     fun withAmount(value: String): Parsed {
+        if (signed) return Parsed.Failed(ParseError.SignedQr)
         val am = value.trim()
         if (!isValidAmount(am) || BigDecimal(am).signum() <= 0) return Parsed.Failed(ParseError.InvalidAmount(am))
         val q = raw.indexOf('?')
@@ -78,6 +86,7 @@ data class UpiPayment(
                     payeeName = params["pn"]?.trim()?.takeIf { it.isNotEmpty() },
                     amount = displayAmount,
                     note = params["tn"]?.trim()?.takeIf { it.isNotEmpty() },
+                    signed = !params["sign"].isNullOrBlank(),
                 ),
             )
         }
