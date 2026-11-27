@@ -24,6 +24,7 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -443,13 +444,68 @@ class AppWorkflowTest {
         assertEquals(merchantQr, decodeSharedImage(shared.getParcelableExtra(Intent.EXTRA_STREAM)!!))
     }
 
+    private fun pickerTiles(picker: PickerActivity): List<View> {
+        idle()
+        val grid = picker.findViewById<RecyclerView>(R.id.appGrid)
+        // The activity window lays the grid out; only lay it out here if it has not been yet.
+        if (grid.height == 0) {
+            grid.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
+            grid.layout(0, 0, 1080, grid.measuredHeight)
+        }
+        return (0 until grid.adapter!!.itemCount).map { grid.findViewHolderForAdapterPosition(it)!!.itemView }
+    }
+
+    private fun tileLabel(tile: View) = tile.findViewById<android.widget.TextView>(R.id.label).text.toString()
+
+    @Test fun pickerListsYourAppsDefaultFirstAndSkipsHiddenOnes() {
+        Prefs(app).setVisible("com.dreamplug.androidapp", false)
+        shadowOf(app).grantPermissions(Manifest.permission.CAMERA)
+        val picker = Robolectric.buildActivity(PickerActivity::class.java).setup().get()
+        idle()
+        val tiles = pickerTiles(picker)
+        assertEquals(listOf("Kiwi", "Paytm", "Google Pay", "PhonePe"), tiles.map(::tileLabel))
+        assertEquals(View.VISIBLE, tiles[0].findViewById<View>(R.id.badge).visibility)
+        capture(picker.window.decorView, "12-picker")
+    }
+
+    @Test fun tappingAnAppOpensItSoItsOwnScannerStartsThePayment() {
+        val picker = Robolectric.buildActivity(PickerActivity::class.java).setup().get()
+        idle()
+        pickerTiles(picker).first { tileLabel(it) == "Paytm" }.performClick()
+        idle()
+        val opened = shadowOf(picker).nextStartedActivity
+        assertEquals(ComponentName("net.one97.paytm", "net.one97.paytm.HomeActivity"), opened.component)
+        // Nothing payment-related is handed over: no upi:// link, no QR image.
+        assertNull(opened.data)
+        assertNull(opened.extras?.get(Intent.EXTRA_STREAM))
+    }
+
+    @Test fun longPressMakesAnAppTheDefault() {
+        val picker = Robolectric.buildActivity(PickerActivity::class.java).setup().get()
+        idle()
+        pickerTiles(picker).first { tileLabel(it) == "PhonePe" }.performLongClick()
+        idle()
+        val menu = ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
+        assertEquals("Make default", menu.listView.adapter.getItem(0).toString())
+        shadowOf(menu.listView).performItemClick(0)
+        idle()
+        assertEquals("com.phonepe.app", Prefs(app).defaultPackage)
+        assertEquals("PhonePe", tileLabel(pickerTiles(picker).first()))
+    }
+
+    @Test fun scanHereInsteadOpensTheUpiHubScanner() {
+        val picker = Robolectric.buildActivity(PickerActivity::class.java).setup().get()
+        picker.findViewById<View>(R.id.scanHereButton).performClick()
+        assertEquals(MainActivity::class.java.name, shadowOf(picker).nextStartedActivity.component!!.className)
+    }
+
     @Test fun homeScreenWidgetOpensScanner() {
         val manager = android.appwidget.AppWidgetManager.getInstance(app)
         val id = shadowOf(manager).createWidget(ScanWidgetProvider::class.java, R.layout.widget_scan)
         val view = shadowOf(manager).getViewFor(id)
         view.findViewById<View>(R.id.widgetRoot).performClick()
         val started = shadowOf(app).nextStartedActivity
-        assertEquals(MainActivity::class.java.name, started.component!!.className)
+        assertEquals(PickerActivity::class.java.name, started.component!!.className)
 
         val px = (96 * app.resources.displayMetrics.density).toInt()
         view.measure(View.MeasureSpec.makeMeasureSpec(px, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(px, View.MeasureSpec.EXACTLY))
@@ -582,6 +638,12 @@ class AppWorkflowTest {
         spm.addIntentFilterForActivity(component, IntentFilter(Intent.ACTION_VIEW).apply {
             if (defaultCategory) addCategory(Intent.CATEGORY_DEFAULT)
             addDataScheme("upi")
+        })
+        // A normal launcher screen, which the picker opens.
+        val launcher = ComponentName(pkg, "$pkg.HomeActivity")
+        spm.addActivityIfNotPresent(launcher).exported = true
+        spm.addIntentFilterForActivity(launcher, IntentFilter(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
         })
         spm.setApplicationIcon(pkg, letterIcon(app, label.first(), color))
     }

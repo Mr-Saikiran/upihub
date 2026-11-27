@@ -24,6 +24,9 @@ struct PaymentRequest: Identifiable {
 /// Opens straight into a live QR scanner. A code from the camera, a picked
 /// screenshot or a typed UPI ID all go to the chooser sheet.
 struct ContentView: View {
+    /// Set when shown over the picker: adds a back button.
+    var onClose: (() -> Void)? = nil
+
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.scenePhase) private var scenePhase
 
@@ -130,6 +133,12 @@ struct ContentView: View {
 
     private var topBar: some View {
         HStack(spacing: 10) {
+            if let onClose {
+                Button(action: onClose) {
+                    Image(systemName: "chevron.left").font(.title2.weight(.semibold)).foregroundStyle(.white)
+                }
+                .accessibilityLabel("Back")
+            }
             Image("Logo").resizable().frame(width: 32, height: 32)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .accessibilityHidden(true)

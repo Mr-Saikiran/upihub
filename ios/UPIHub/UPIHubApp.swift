@@ -6,7 +6,7 @@ struct UPIHubApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            PickerView()
                 .environmentObject(settings)
                 .tint(Brand.primary)
         }

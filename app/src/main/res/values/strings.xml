@@ -46,8 +46,16 @@
     <string name="reorder">Drag to reorder %1$s</string>
     <string name="no_installed_upi">No UPI apps are installed on this phone.</string>
     <string name="back">Back</string>
+    <string name="scan_with">Scan with</string>
+    <string name="scan_with_body">Pick an app and tap Scan in it. The app scans the QR itself, so payment apps treat it as their own scan, not a payment handed over by another app.</string>
+    <string name="scan_with_app">Scan with %1$s</string>
+    <string name="opening_app_tap_scan">Opening %1$s. Tap Scan there.</string>
+    <string name="scan_here_instead">Scan here instead</string>
+    <string name="scan_here_note">Scans in UPI Hub and hands the payment over. Some apps decline these, mostly for small shops and credit-card UPI.</string>
+    <string name="make_default">Make default</string>
+    <string name="hide_app">Hide from this list</string>
     <string name="widget_label">Scan &amp; Pay</string>
-    <string name="widget_description">Open the UPI Hub scanner from your home screen</string>
+    <string name="widget_description">Pick a UPI app to scan with, from your home screen</string>
     <string name="add_widget">Add scan widget to home screen</string>
     <string name="add_widget_manual">Long-press your home screen, tap Widgets, then pick UPI Hub.</string>
     <string name="camera_needed_title">Scan with your camera</string>

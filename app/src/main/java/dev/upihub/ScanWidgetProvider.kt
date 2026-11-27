@@ -9,7 +9,7 @@ import android.content.Intent
 import android.os.Build
 import android.widget.RemoteViews
 
-/** 1x1 home-screen widget that opens straight into the scanner. */
+/** 1x1 home-screen widget that opens the app picker, one tap from scanning in the chosen app. */
 class ScanWidgetProvider : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
         val views = RemoteViews(context.packageName, R.layout.widget_scan).apply {
@@ -20,7 +20,7 @@ class ScanWidgetProvider : AppWidgetProvider() {
 
     companion object {
         private fun scanIntent(context: Context): PendingIntent {
-            val intent = Intent(context, MainActivity::class.java)
+            val intent = Intent(context, PickerActivity::class.java)
                 .setAction(Intent.ACTION_MAIN)
                 .addCategory(Intent.CATEGORY_LAUNCHER)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)

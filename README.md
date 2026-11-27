@@ -53,7 +53,23 @@ Known apps (any other installed UPI app is detected too):
   app's result back to the caller.
 - Light and dark themes; adaptive launcher icon.
 
-## How a payment reaches the app
+## Pick first, then scan in the app (home screen)
+
+Payment apps treat a payment handed over by another app, as a `upi://` link
+or a shared QR image, as coming from an unknown source, and many decline it,
+notably for small (P2PM) merchants and RuPay credit cards, while the same QR
+scanned in the app works. So the home screen is a picker: tap an app and UPI
+Hub opens it, you tap Scan there, and the payment is the app's own scan.
+Nothing payment-related is handed over.
+
+No analysed app lets another app open its scanner screen directly: PhonePe's
+`Navigator_QrCodeScannerWrapperActivity` and INDmoney's
+`TpapQrScanningActivity` are not exported, and Google Pay's scanner is inside
+its Flutter UI. The app therefore opens on its home screen, one tap from Scan.
+Long-press a tile to make it the default or hide it. **Scan here instead**
+keeps the earlier scan-in-UPI-Hub flow for apps that accept hand-offs.
+
+## How a payment reaches the app (Scan here instead)
 
 NPCI treats these as separate UPI channels, and payment apps apply their own
 risk rules per channel. Small (P2PM) merchants and RuPay credit cards are
